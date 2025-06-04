@@ -1,0 +1,13 @@
+server_addr = "[::]:443"
+udp_session_timeout = 30
+udp_socket_timeout = 60
+cert_path = "server.crt"
+key_path = "server.key"
+
+[[users]]
+uuid = "e3f1c2b4a5d6478e9f0b1c2d3e4f5a6b"
+password = "password1"
+
+[[users]]
+uuid = "e3f1c2b4a5d6478e9f0b1c2d3e4f5a88"
+password = "password2"
