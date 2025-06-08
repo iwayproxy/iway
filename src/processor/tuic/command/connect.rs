@@ -94,8 +94,8 @@ impl Processor for ConnectProcessor {
         let copy_result = io::copy_bidirectional_with_sizes(
             &mut bidirectional_stream.get_mut(),
             &mut tcp_stream,
-            1024 * 16,
-            1024 * 64,
+            1024 * 1024,
+            1024 * 1024,
         )
         .await;
 

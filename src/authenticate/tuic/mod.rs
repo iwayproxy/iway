@@ -77,7 +77,7 @@ impl TuicAuthenticationManager {
         }
     }
 
-    pub fn _unauthenticate(&self, socket_address: &SocketAddr) {
+    pub fn unauthenticate(&self, socket_address: &SocketAddr) {
         self.authentications.remove(&socket_address);
     }
 }

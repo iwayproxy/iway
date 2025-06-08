@@ -197,8 +197,6 @@ impl Server for TuicServer {
                 Error::new(ErrorKind::Other, format!("Failed to create socket: {}", e))
             })?;
 
-            // 
-
             if Domain::IPV6 == domain {
                 socket.set_only_v6(false).map_err(|e| {
                     Error::new(
@@ -286,7 +284,7 @@ impl Server for TuicServer {
                                             let t_notifier = Arc::clone(&notifier);
                                             let recevied_processor = Arc::clone(&tuic_processor);
                                             let recevied_conn = connection.clone();
-                                            tokio::spawn(async move {
+                                            let t_uni = tokio::spawn(async move {
                                                 let _ = recevied_processor
                                                     .process_uni(recevied_conn, t_notifier)
                                                     .await;
@@ -295,7 +293,7 @@ impl Server for TuicServer {
                                             let bidirectional_processor = Arc::clone(&tuic_processor);
                                             let bidirection_conn = connection.clone();
                                             let rx = notifier.clone();
-                                            tokio::spawn(async move {
+                                            let t_bid = tokio::spawn(async move {
                                                 if let Some(state) = rx.wait().await {
                                                     match state {
                                                         NotifyState::Success => {
@@ -314,7 +312,7 @@ impl Server for TuicServer {
                                             let datagram_processor = Arc::clone(&tuic_processor);
                                             let datagram_conn = connection.clone();
                                             let rx = notifier.clone();
-                                            tokio::spawn(async move {
+                                            let t_dat = tokio::spawn(async move {
                                                 if let Some(state) = rx.wait().await {
                                                     match state {
                                                         NotifyState::Success => {
@@ -329,6 +327,10 @@ impl Server for TuicServer {
                                                     }
                                                 }
                                             });
+
+                                            let _ = tokio::join!(t_uni, t_bid, t_dat);
+                                            tuic_processor.unauthenticate(&remote);
+                                            debug!("Connection with {} has finished!", remote);
                                         }
                                         Err(e) => {
                                             debug!("Connecting await failed: {}", e);

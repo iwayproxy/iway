@@ -4,6 +4,7 @@ pub mod udp_session_manager;
 use anyhow::Context;
 use command::dissociate::DissociateProcess;
 use std::io::{self, Cursor};
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use udp_session_manager::UdpSessionManager;
@@ -163,9 +164,9 @@ impl ConnectionProcessor for TuicConnectionProcessor {
                 let command = match Command::read_from(&mut recv).await {
                     Ok(command) => command,
                     Err(e) => {
-                        error!("Failed to parse command from {} E: {}", remote, e);
+                        debug!("Failed to parse command from {} E: {}", remote, e);
                         for (i, cause) in e.chain().enumerate() {
-                            error!("{}: {}", i, cause);
+                            debug!("{}: {}", i, cause);
                         }
                         return;
                     }
@@ -176,7 +177,7 @@ impl ConnectionProcessor for TuicConnectionProcessor {
                             if let Err(e) =
                                 ConnectProcessor::new(send, recv, connect).process().await
                             {
-                                error!("Failed to process Connect command: {}", e);
+                                debug!("Failed to process Connect command: {}", e);
                             }
                         });
                     }
@@ -241,6 +242,11 @@ impl ConnectionProcessor for TuicConnectionProcessor {
     }
 }
 impl TuicConnectionProcessor {
+    pub fn unauthenticate(&self, remote: &SocketAddr) {
+
+        self.authentication_manager.unauthenticate(&remote);
+    }
+
     pub fn new<I>(user_entries: I) -> Self
     where
         I: IntoIterator<Item = (uuid::Uuid, String)>,
