@@ -106,7 +106,7 @@ impl ConnectionProcessor for TuicConnectionProcessor {
                                 });
                             }
                             NotifyState::Failure => {
-                                error!("Do authentication failed, client: {}", remote);
+                                debug!("Do authentication failed, client: {}", remote);
                                 continue;
                             }
                         }
@@ -135,7 +135,7 @@ impl ConnectionProcessor for TuicConnectionProcessor {
                                 });
                             }
                             NotifyState::Failure => {
-                                error!("Do authentication failed, client: {}", remote);
+                                debug!("Do authentication failed, client: {}", remote);
                                 continue;
                             }
                         }

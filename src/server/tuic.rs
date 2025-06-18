@@ -12,7 +12,7 @@ use crate::processor::ConnectionProcessor;
 use super::{Server, ServerStatus};
 
 use async_trait::async_trait;
-use log::{debug, error, info};
+use log::{debug, info};
 use quinn::congestion::BbrConfig;
 use quinn::crypto::rustls::QuicServerConfig;
 use quinn::{Endpoint, EndpointConfig, ServerConfig, TokioRuntime, TransportConfig, VarInt};
@@ -302,7 +302,7 @@ impl Server for TuicServer {
                                                                 .await;
                                                         }
                                                         NotifyState::Failure => {
-                                                            error!("Do authentication failed, client: {}", remote);
+                                                            debug!("Do authentication failed, client: {}", remote);
                                                             return;
                                                         }
                                                     }
@@ -321,7 +321,7 @@ impl Server for TuicServer {
                                                                 .await;
                                                         }
                                                         NotifyState::Failure => {
-                                                            error!("Do authentication failed, client: {}", remote);
+                                                            debug!("Do authentication failed, client: {}", remote);
                                                             return;
                                                         }
                                                     }
