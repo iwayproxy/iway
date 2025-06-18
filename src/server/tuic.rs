@@ -329,7 +329,6 @@ impl Server for TuicServer {
                                             });
 
                                             let _ = tokio::join!(t_uni, t_bid, t_dat);
-                                            tuic_processor.unauthenticate(&remote);
                                             debug!("Connection with {} has finished!", remote);
                                         }
                                         Err(e) => {

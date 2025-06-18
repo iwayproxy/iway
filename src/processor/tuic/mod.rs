@@ -4,7 +4,6 @@ pub mod udp_session_manager;
 use anyhow::Context;
 use command::dissociate::DissociateProcess;
 use std::io::{self, Cursor};
-use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 use udp_session_manager::UdpSessionManager;
@@ -242,11 +241,6 @@ impl ConnectionProcessor for TuicConnectionProcessor {
     }
 }
 impl TuicConnectionProcessor {
-    pub fn unauthenticate(&self, remote: &SocketAddr) {
-
-        self.authentication_manager.unauthenticate(&remote);
-    }
-
     pub fn new<I>(user_entries: I) -> Self
     where
         I: IntoIterator<Item = (uuid::Uuid, String)>,

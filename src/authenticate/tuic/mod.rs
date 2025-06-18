@@ -1,13 +1,11 @@
 use std::{
     fmt::Debug,
     io::{Error, ErrorKind},
-    net::SocketAddr,
     sync::Arc,
-    time::Instant,
 };
 
 use dashmap::DashMap;
-use log::{debug, error};
+use log::error;
 use quinn::Connection;
 
 use uuid::Uuid;
@@ -17,7 +15,6 @@ use crate::protocol::tuic::command::authenticate::Authenticate;
 #[derive(Debug)]
 pub struct TuicAuthenticationManager {
     users: Arc<DashMap<Uuid, Box<[u8]>>>,
-    authentications: Arc<DashMap<SocketAddr, Instant>>,
 }
 
 impl TuicAuthenticationManager {
@@ -26,7 +23,6 @@ impl TuicAuthenticationManager {
         I: IntoIterator<Item = (Uuid, String)>,
     {
         let users: Arc<DashMap<Uuid, Box<[u8]>>> = Arc::new(DashMap::new());
-        let authentications: Arc<DashMap<SocketAddr, Instant>> = Arc::new(DashMap::new());
 
         for (uuid, password) in user_entries {
             users.insert(uuid, Box::from(password.as_bytes()));
@@ -34,7 +30,6 @@ impl TuicAuthenticationManager {
 
         TuicAuthenticationManager {
             users,
-            authentications,
         }
     }
 
@@ -60,12 +55,6 @@ impl TuicAuthenticationManager {
             .unwrap();
 
         if authenticate.token() == buf {
-            self.authentications
-                .insert(connection.remote_address().clone(), Instant::now());
-            debug!(
-                "Successful to authenticate cliend, address: {}",
-                connection.remote_address()
-            );
             Ok(())
         } else {
             error!(
@@ -77,7 +66,4 @@ impl TuicAuthenticationManager {
         }
     }
 
-    pub fn unauthenticate(&self, socket_address: &SocketAddr) {
-        self.authentications.remove(&socket_address);
-    }
 }
