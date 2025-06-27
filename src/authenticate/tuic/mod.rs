@@ -28,9 +28,7 @@ impl TuicAuthenticationManager {
             users.insert(uuid, Box::from(password.as_bytes()));
         }
 
-        TuicAuthenticationManager {
-            users,
-        }
+        TuicAuthenticationManager { users }
     }
 
     pub fn authenticate(
@@ -65,5 +63,4 @@ impl TuicAuthenticationManager {
             Err(Error::new(ErrorKind::Other, "Unathenticated access"))
         }
     }
-
 }

@@ -80,14 +80,19 @@ impl Processor for ConnectProcessor {
                 self.connect.address()
             ))?;
 
-        let mut tcp_stream = match connect_with_keepalive(socket_addr, Duration::from_secs(30), Duration::from_secs(5))
-                .await {
-                    Ok(stream) => stream,
-                    Err(e) => {
-                        debug!("Failed to connect to {}: {}", socket_addr, e);
-                        return Err(e.into());
-                    }
-                };
+        let mut tcp_stream = match connect_with_keepalive(
+            socket_addr,
+            Duration::from_secs(30),
+            Duration::from_secs(5),
+        )
+        .await
+        {
+            Ok(stream) => stream,
+            Err(e) => {
+                debug!("Failed to connect to {}: {}", socket_addr, e);
+                return Err(e.into());
+            }
+        };
 
         let mut bidirectional_stream = self.compat();
 

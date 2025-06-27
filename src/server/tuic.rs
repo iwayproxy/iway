@@ -106,8 +106,14 @@ impl TuicServer {
             )
         })?;
 
-        let user_entries = config.users.iter()
-            .filter_map(|u| uuid::Uuid::parse_str(&u.uuid).ok().map(|id| (id, u.password.clone())))
+        let user_entries = config
+            .users
+            .iter()
+            .filter_map(|u| {
+                uuid::Uuid::parse_str(&u.uuid)
+                    .ok()
+                    .map(|id| (id, u.password.clone()))
+            })
             .collect::<Vec<_>>();
 
         Ok(Self {
