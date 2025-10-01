@@ -23,6 +23,8 @@ use rustls::CipherSuite;
 use rustls_pemfile::{certs, private_key};
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::sync::watch::Receiver;
+// use socket2::sockopt::IpTos;
+// use socket2::sockopt::RecvTos;
 
 fn load_certs(path: &Path) -> io::Result<Vec<CertificateDer<'static>>> {
     let file = File::open(path).map_err(|e| {
@@ -216,9 +218,21 @@ impl Server for TuicServer {
             socket.set_reuse_port(true)?;
 
             #[cfg(target_os = "linux")]
-            socket.set_recv_tos(true)?;
-            #[cfg(target_os = "linux")]
-            socket.set_tos(184)?;
+            {
+                use std::os::unix::prelude::AsRawFd;
+                use libc::{IPPROTO_IP, IP_TOS};
+                // Set IP_TOS to 0x10 (low delay)
+                unsafe {
+                    let tos: libc::c_int = 0x10;
+                    libc::setsockopt(
+                        socket.as_raw_fd(),
+                        IPPROTO_IP,
+                        IP_TOS,
+                        &tos as *const _ as *const libc::c_void,
+                        std::mem::size_of_val(&tos) as libc::socklen_t,
+                    );
+                }
+            }
 
             socket.set_recv_buffer_size(1 << 25)?;
             socket.set_send_buffer_size(1 << 25)?;
