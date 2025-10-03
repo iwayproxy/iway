@@ -23,8 +23,6 @@ use rustls::CipherSuite;
 use rustls_pemfile::{certs, private_key};
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::sync::watch::Receiver;
-// use socket2::sockopt::IpTos;
-// use socket2::sockopt::RecvTos;
 
 fn load_certs(path: &Path) -> io::Result<Vec<CertificateDer<'static>>> {
     let file = File::open(path).map_err(|e| {
