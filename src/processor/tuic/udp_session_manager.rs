@@ -208,12 +208,13 @@ impl UdpSessionManager {
         client: SocketAddr,
         assoc_id: u16,
     ) -> Result<Arc<Mutex<UdpSocket>>, UdpError> {
-        match self.socket_map.get_mut(&(client, assoc_id)) { Some(mut entry) => {
-            entry.value_mut().1 = Instant::now();
-            Ok(entry.value().0.clone())
-        } _ => {
-            Err(UdpError::SocketNotFound(client, assoc_id))
-        }}
+        match self.socket_map.get_mut(&(client, assoc_id)) {
+            Some(mut entry) => {
+                entry.value_mut().1 = Instant::now();
+                Ok(entry.value().0.clone())
+            }
+            _ => Err(UdpError::SocketNotFound(client, assoc_id)),
+        }
     }
 
     pub fn remove_socket(&self, client: SocketAddr, assoc_id: u16) {

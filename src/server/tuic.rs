@@ -217,8 +217,8 @@ impl Server for TuicServer {
 
             #[cfg(target_os = "linux")]
             {
-                use std::os::unix::prelude::AsRawFd;
                 use libc::{IPPROTO_IP, IP_TOS};
+                use std::os::unix::prelude::AsRawFd;
                 // Set IP_TOS to 0x10 (low delay)
                 unsafe {
                     let tos: libc::c_int = 0x10;
