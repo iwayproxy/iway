@@ -248,7 +248,7 @@ impl TuicConnectionProcessor {
         let authentication_manager = Arc::new(TuicAuthenticationManager::new(user_entries));
         let udp_session_manager = UdpSessionManager::new(
             Duration::from_secs(10),
-            Duration::from_secs(60),
+            Duration::from_secs(30),
         );
 
         Self {
