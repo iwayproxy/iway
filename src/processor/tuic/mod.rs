@@ -246,11 +246,10 @@ impl TuicConnectionProcessor {
         I: IntoIterator<Item = (uuid::Uuid, String)>,
     {
         let authentication_manager = Arc::new(TuicAuthenticationManager::new(user_entries));
-        let udp_session_manager = Arc::new(UdpSessionManager::new(
+        let udp_session_manager = UdpSessionManager::new(
             Duration::from_secs(10),
-            Duration::from_secs(30),
             Duration::from_secs(60),
-        ));
+        );
 
         Self {
             authentication_manager,

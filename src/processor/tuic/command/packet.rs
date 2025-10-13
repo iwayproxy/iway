@@ -3,7 +3,6 @@ use std::{io, sync::Arc};
 
 use anyhow::{bail, Context, Result};
 
-use tokio::sync::Mutex;
 use tokio::time::timeout;
 
 use super::Processor;
@@ -41,45 +40,22 @@ impl PacketProcessor {
             bail!("Failed to resolve address to dest socket address {}", dest);
         };
 
-        if !self
-            .udp_session_manager
-            .is_registered(self.connection.remote_address(), self.packet.assoc_id)
-        {
-            let bind_addr = match dest_socket_addr {
-                std::net::SocketAddr::V4(_) => "0.0.0.0:0",
-                std::net::SocketAddr::V6(_) => "[::]:0",
-            };
-            let socket = UdpSocket::bind(bind_addr).await?;
-            self.udp_session_manager.register_socket(
-                self.connection.remote_address(),
-                self.packet.assoc_id,
-                Arc::new(Mutex::new(socket)),
-            );
-        }
-
-        let socket = match self
-            .udp_session_manager
-            .get_socket(self.connection.remote_address(), self.packet.assoc_id)
-        {
-            Ok(socket) => socket,
-            Err(_) => bail!(
-                "Failed to get socket for assoc_id: {}",
-                self.packet.assoc_id
-            ),
+        let bind_addr = match dest_socket_addr {
+            std::net::SocketAddr::V4(_) => "0.0.0.0:0",
+            std::net::SocketAddr::V6(_) => "[::]:0",
         };
 
-        {
-            let socket = socket.lock().await;
-            let sent = socket.send_to(data, dest_socket_addr).await?;
-            debug!("Has sent {} data to {}", sent, dest_socket_addr);
-        };
+        let socket = UdpSocket::bind(bind_addr).await?;
+
+        let sent = socket.send_to(data, dest_socket_addr).await?;
+        debug!("Has sent {} data to {}", sent, dest_socket_addr);
+
 
         let mut all_packets = Vec::new();
         let mut buf = vec![0u8; 65536];
 
         loop {
             let n = {
-                let socket = socket.lock().await;
                 match timeout(Duration::from_secs(3), socket.recv_from(&mut buf)).await {
                     Ok(Ok((n, _addr))) => Some(n),
                     Ok(Err(e)) => {

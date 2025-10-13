@@ -41,7 +41,7 @@ impl Processor for DissociateProcess {
             self.dissociate.assoc_id()
         );
         self.udp_session_manager
-            .remove_socket(self.connection.remote_address(), self.dissociate.assoc_id());
+            .remove_session(self.connection.remote_address(), self.dissociate.assoc_id());
         Ok(())
     }
 }

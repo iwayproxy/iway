@@ -7,7 +7,7 @@ use std::{
     time::{Duration, Instant},
 };
 use thiserror::Error;
-use tokio::{net::UdpSocket, sync::Mutex, time};
+use tokio::time;
 
 use crate::protocol::tuic::command::packet::Packet;
 
@@ -17,10 +17,6 @@ pub enum UdpError {
     FragmentTooLarge,
     #[error("Invalid fragment ID")]
     InvalidFragmentId,
-    #[error("Socket not found for client {0} and association {1}")]
-    SocketNotFound(SocketAddr, u16),
-    #[error("Cleanup operation failed: {0}")]
-    CleanupError(String),
 }
 
 #[derive(Debug, Clone)]
@@ -129,108 +125,47 @@ impl ReassemblyBuffer {
 
 #[derive(Clone, Debug)]
 pub struct UdpSessionManager {
-    sessions: Arc<DashMap<(SocketAddr, u16, u16), ReassemblyBuffer>>,
-
-    socket_map: Arc<DashMap<(SocketAddr, u16), (Arc<Mutex<UdpSocket>>, Instant)>>,
-
+    sessions: Arc<DashMap<(SocketAddr, u16), ReassemblyBuffer>>,
     session_timeout: Duration,
-
-    socket_timeout: Duration,
-
-    #[allow(dead_code)]
     cleanup_interval: Duration,
 }
 
 impl UdpSessionManager {
     pub fn new(
         session_timeout: Duration,
-        socket_timeout: Duration,
         cleanup_interval: Duration,
-    ) -> Self {
+    ) -> Arc<UdpSessionManager> {
         info!(
-            "Creating new UdpSessionManager with session_timeout={:?}, socket_timeout={:?}, cleanup_interval={:?}",
-            session_timeout, socket_timeout, cleanup_interval
+            "Creating new UdpSessionManager with session_timeout={:?}, cleanup_interval={:?}",
+            session_timeout, cleanup_interval
         );
 
         let manager = Self {
             sessions: Arc::new(DashMap::new()),
-            socket_map: Arc::new(DashMap::new()),
             session_timeout,
-            socket_timeout,
             cleanup_interval,
         };
 
+        let atomic_manager = Arc::new(manager);
+
+        let schedule_manager = atomic_manager.clone();
         {
-            let manager = manager.clone();
             tokio::spawn(async move {
-                let mut interval = time::interval(cleanup_interval);
+                let mut interval = time::interval(schedule_manager.cleanup_interval);
                 loop {
                     interval.tick().await;
-                    if let Err(e) = manager.cleanup_expired_sessions() {
+                    if let Err(e) = schedule_manager.cleanup_expired_sessions() {
                         error!("Error cleaning up expired sessions: {}", e);
                     }
                 }
             });
         }
 
-        {
-            let manager = manager.clone();
-            tokio::spawn(async move {
-                let mut interval = time::interval(cleanup_interval);
-                loop {
-                    interval.tick().await;
-                    if let Err(e) = manager.cleanup_expired_sockets() {
-                        debug!("Error cleaning up expired sockets: {}", e);
-                    }
-                }
-            });
-        }
-
-        manager
-    }
-
-    pub fn register_socket(
-        &self,
-        client: SocketAddr,
-        assoc_id: u16,
-        socket: Arc<Mutex<UdpSocket>>,
-    ) {
-        debug!(
-            "Registering socket for client {} with assoc_id {}",
-            client, assoc_id
-        );
-        self.socket_map
-            .insert((client, assoc_id), (socket, Instant::now()));
-    }
-
-    pub fn get_socket(
-        &self,
-        client: SocketAddr,
-        assoc_id: u16,
-    ) -> Result<Arc<Mutex<UdpSocket>>, UdpError> {
-        match self.socket_map.get_mut(&(client, assoc_id)) {
-            Some(mut entry) => {
-                entry.value_mut().1 = Instant::now();
-                Ok(entry.value().0.clone())
-            }
-            _ => Err(UdpError::SocketNotFound(client, assoc_id)),
-        }
-    }
-
-    pub fn remove_socket(&self, client: SocketAddr, assoc_id: u16) {
-        debug!(
-            "Removing socket for client {} with assoc_id {}",
-            client, assoc_id
-        );
-        self.socket_map.remove(&(client, assoc_id));
-    }
-
-    pub fn is_registered(&self, client: SocketAddr, assoc_id: u16) -> bool {
-        self.socket_map.contains_key(&(client, assoc_id))
+        atomic_manager
     }
 
     pub fn receive_fragment(&self, frag: UdpFragment, client: SocketAddr) -> Option<Bytes> {
-        let key = (client, frag.assoc_id, frag.pkt_id);
+        let key = (client, frag.assoc_id);
         debug!(
             "Receiving fragment from client {} with assoc_id {} and pkt_id {}",
             client, frag.assoc_id, frag.pkt_id
@@ -276,6 +211,26 @@ impl UdpSessionManager {
         }
     }
 
+    pub fn remove_session(&self, client: SocketAddr, assoc_id: u16) {
+        let keys: Vec<_> = self.sessions.iter()
+            .filter_map(|entry| {
+                let (addr, entry_assoc_id) = *entry.key();
+                if addr == client && entry_assoc_id == assoc_id {
+                    Some(*entry.key())
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        for key in keys {
+            if let Some((_, mut buffer)) = self.sessions.remove(&key) {
+                buffer.shrink_to_fit();
+                debug!("Removed session for {:?}", key);
+            }
+        }
+    }
+
     pub fn cleanup_expired_sessions(&self) -> Result<(), UdpError> {
         let now = Instant::now();
         let timeout = self.session_timeout;
@@ -304,31 +259,4 @@ impl UdpSessionManager {
         Ok(())
     }
 
-    fn cleanup_expired_sockets(&self) -> Result<(), UdpError> {
-        let now = Instant::now();
-        let mut removed = 0;
-
-        self.socket_map.retain(|key, (_, ts)| {
-            let retain = now.duration_since(*ts) < self.socket_timeout;
-            if !retain {
-                removed += 1;
-                debug!("Removing expired socket for {:?}", key);
-            }
-            retain
-        });
-
-        debug!(
-            "Cleaned up {} expired sockets, {} remaining",
-            removed,
-            self.socket_map.len()
-        );
-
-        if removed > 0 && self.socket_map.len() == 0 {
-            return Err(UdpError::CleanupError(
-                "All sockets have been removed due to timeout".to_string(),
-            ));
-        }
-
-        Ok(())
-    }
 }
