@@ -82,8 +82,9 @@ impl Processor for ConnectProcessor {
 
         let mut tcp_stream = match connect_with_keepalive(
             socket_addr,
-            Duration::from_secs(30),
             Duration::from_secs(5),
+            Duration::from_secs(2),
+            2
         )
         .await
         {
@@ -99,8 +100,8 @@ impl Processor for ConnectProcessor {
         let copy_result = io::copy_bidirectional_with_sizes(
             &mut bidirectional_stream.get_mut(),
             &mut tcp_stream,
-            128 * 1024,
-            128 * 1024,
+            2 * 1024 * 1024,
+            2 * 1024 * 1024,
         )
         .await;
 
@@ -126,13 +127,14 @@ pub async fn connect_with_keepalive(
     addr: SocketAddr,
     keepalive_idle: Duration,
     keepalive_interval: Duration,
-) -> std::io::Result<TcpStream> {
+    retries: u32) -> std::io::Result<TcpStream> {
     let socket = Socket::new(Domain::for_address(addr), Type::STREAM, None)?;
     socket.set_nonblocking(true)?;
 
     let keepalive = TcpKeepalive::new()
         .with_time(keepalive_idle)
-        .with_interval(keepalive_interval);
+        .with_interval(keepalive_interval)
+        .with_retries(retries);
 
     socket.set_tcp_keepalive(&keepalive)?;
 

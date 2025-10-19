@@ -8,7 +8,7 @@ use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 use log::{error, info};
 use server::ServerManager;
-use std::{env, time::Instant};
+use std::{cmp::max, env, time::Instant};
 
 #[cfg(all(not(windows), not(target_env = "msvc")))]
 use jemallocator;
@@ -38,8 +38,23 @@ fn init_logging() {
     tracing::subscriber::set_global_default(subscriber).expect("setting tracing default failed");
 }
 
-#[tokio::main(flavor = "multi_thread", worker_threads = 16)]
-async fn main() -> Result<()> {
+fn recommended_worker_threads(cpu_load_ratio: f64) -> usize {
+    let cpus = num_cpus::get();
+    max(2, (cpus as f64 * cpu_load_ratio).round() as usize)
+}
+
+fn main() {
+    let num_threads = recommended_worker_threads(1.0);
+    let _ = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(num_threads)
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async_main());
+}
+
+// #[tokio::main(flavor = "multi_thread", worker_threads = 16)]
+async fn async_main() -> Result<()> {
     #[cfg(debug_assertions)]
     init_logging();
 
