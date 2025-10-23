@@ -140,15 +140,13 @@ impl UdpSessionManager {
             session_timeout, cleanup_interval
         );
 
-        let manager = Self {
+        let manager = Arc::new(Self {
             sessions: Arc::new(DashMap::new()),
             session_timeout,
             cleanup_interval,
-        };
+        });
 
-        let atomic_manager = Arc::new(manager);
-
-        let schedule_manager = atomic_manager.clone();
+        let schedule_manager = manager.clone();
         {
             tokio::spawn(async move {
                 let mut interval = time::interval(schedule_manager.cleanup_interval);
@@ -161,7 +159,7 @@ impl UdpSessionManager {
             });
         }
 
-        atomic_manager
+        manager
     }
 
     pub fn receive_fragment(&self, frag: UdpFragment, client: SocketAddr) -> Option<Bytes> {
