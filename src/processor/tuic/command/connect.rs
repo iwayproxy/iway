@@ -59,10 +59,7 @@ impl AsyncWrite for ConnectProcessor {
         AsyncWrite::poll_flush(Pin::new(&mut self.get_mut().send), cx)
     }
 
-    fn poll_shutdown(
-        self: Pin<&mut Self>,
-        cx: &mut TaskContext<'_>,
-    ) -> Poll<std::io::Result<()>> {
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<std::io::Result<()>> {
         AsyncWrite::poll_shutdown(Pin::new(&mut self.get_mut().send), cx)
     }
 }
@@ -75,13 +72,16 @@ impl Processor for ConnectProcessor {
             .address()
             .to_socket_address()
             .await
-            .context(format!("Failed to resolve address {}", self.connect.address()))?;
+            .context(format!(
+                "Failed to resolve address {}",
+                self.connect.address()
+            ))?;
 
         let mut tcp_stream = match connect_with_keepalive(
             socket_addr,
             Duration::from_secs(5),
             Duration::from_secs(2),
-            2
+            2,
         )
         .await
         {
@@ -97,8 +97,8 @@ impl Processor for ConnectProcessor {
         let copy_result = io::copy_bidirectional_with_sizes(
             &mut bidirectional_stream.get_mut(),
             &mut tcp_stream,
-            2 * 1024 * 1024,
-            2 * 1024 * 1024,
+            8 * 1024 * 1024,
+            8 * 1024 * 1024,
         )
         .await;
 
@@ -127,7 +127,8 @@ pub async fn connect_with_keepalive(
     addr: SocketAddr,
     keepalive_idle: Duration,
     keepalive_interval: Duration,
-    retries: u32) -> std::io::Result<TcpStream> {
+    retries: u32,
+) -> std::io::Result<TcpStream> {
     let socket = Socket::new(Domain::for_address(addr), Type::STREAM, None)?;
     socket.set_nonblocking(true)?;
 

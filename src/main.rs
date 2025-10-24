@@ -4,7 +4,7 @@ use anyhow::Result;
 use console_subscriber::ConsoleLayer;
 use tokio::sync::watch;
 #[cfg(debug_assertions)]
-use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
 use log::{error, info};
 use server::ServerManager;
@@ -133,7 +133,7 @@ async fn async_main() -> Result<()> {
 async fn setup_shutdown_signal() {
     #[cfg(unix)]
     {
-        use tokio::signal::unix::{signal, SignalKind};
+        use tokio::signal::unix::{SignalKind, signal};
 
         let mut sigterm = match signal(SignalKind::terminate()) {
             Ok(s) => s,

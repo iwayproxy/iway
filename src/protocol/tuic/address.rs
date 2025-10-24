@@ -5,7 +5,7 @@ use std::{
     result,
 };
 
-use anyhow::{bail, Ok, Result};
+use anyhow::{Ok, Result, bail};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use log::debug;
 use tokio::{

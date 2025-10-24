@@ -5,7 +5,7 @@ pub mod packet;
 
 use std::sync::Arc;
 use tokio::sync::{Mutex, Notify};
-use tokio::time::{timeout, Duration};
+use tokio::time::{Duration, timeout};
 
 use anyhow::Result;
 use async_trait::async_trait;

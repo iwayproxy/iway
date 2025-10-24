@@ -17,8 +17,8 @@ use log::{debug, error};
 use quinn::{Connection, VarInt};
 
 use crate::authenticate::tuic::TuicAuthenticationManager;
-use crate::processor::tuic::command::Processor;
 use crate::processor::ConnectionProcessor;
+use crate::processor::tuic::command::Processor;
 use crate::protocol::tuic::command::command::Command;
 use command::packet::PacketProcessor;
 
@@ -246,10 +246,8 @@ impl TuicConnectionProcessor {
         I: IntoIterator<Item = (uuid::Uuid, String)>,
     {
         let authentication_manager = Arc::new(TuicAuthenticationManager::new(user_entries));
-        let udp_session_manager = UdpSessionManager::new(
-            Duration::from_secs(10),
-            Duration::from_secs(30),
-        );
+        let udp_session_manager =
+            UdpSessionManager::new(Duration::from_secs(10), Duration::from_secs(30));
 
         Self {
             authentication_manager,

@@ -1,7 +1,7 @@
-use std::time::Duration;
 use std::sync::Arc;
+use std::time::Duration;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 
 use tokio::time::timeout;
 
@@ -49,7 +49,6 @@ impl PacketProcessor {
 
         let sent = socket.send_to(data, dest_socket_addr).await?;
         debug!("Has sent {} data to {}", sent, dest_socket_addr);
-
 
         let mut all_packets = Vec::new();
         let mut buf = vec![0u8; 65536];

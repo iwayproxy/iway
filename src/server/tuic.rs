@@ -5,9 +5,9 @@ use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 use std::{io::Error, net::SocketAddr, path::Path, time::Instant};
 
-use crate::processor::tuic::command::{NotifyState, OneShotNotifier};
-use crate::processor::tuic::TuicConnectionProcessor;
 use crate::processor::ConnectionProcessor;
+use crate::processor::tuic::TuicConnectionProcessor;
+use crate::processor::tuic::command::{NotifyState, OneShotNotifier};
 
 use super::{Server, ServerStatus};
 
@@ -16,10 +16,10 @@ use log::{debug, info};
 use quinn::congestion::BbrConfig;
 use quinn::crypto::rustls::QuicServerConfig;
 use quinn::{Endpoint, EndpointConfig, ServerConfig, TokioRuntime, TransportConfig, VarInt};
+use rustls::CipherSuite;
 use rustls::crypto::aws_lc_rs::cipher_suite::TLS13_AES_128_GCM_SHA256;
 use rustls::crypto::{self, CryptoProvider};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-use rustls::CipherSuite;
 use rustls_pemfile::{certs, private_key};
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::sync::watch::Receiver;
@@ -217,7 +217,7 @@ impl Server for TuicServer {
 
             #[cfg(target_os = "linux")]
             {
-                use libc::{IPPROTO_IP, IP_TOS};
+                use libc::{IP_TOS, IPPROTO_IP};
                 use std::os::unix::prelude::AsRawFd;
                 // Set IP_TOS to 0x10 (low delay)
                 unsafe {

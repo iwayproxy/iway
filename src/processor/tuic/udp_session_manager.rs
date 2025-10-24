@@ -1,5 +1,5 @@
 use bytes::{Bytes, BytesMut};
-use dashmap::{mapref::entry::Entry, DashMap};
+use dashmap::{DashMap, mapref::entry::Entry};
 use log::{debug, error, info};
 use std::{
     net::SocketAddr,
@@ -161,10 +161,7 @@ pub struct UdpSessionManager {
 }
 
 impl UdpSessionManager {
-    pub fn new(
-        session_timeout: Duration,
-        cleanup_interval: Duration,
-    ) -> Arc<UdpSessionManager> {
+    pub fn new(session_timeout: Duration, cleanup_interval: Duration) -> Arc<UdpSessionManager> {
         info!(
             "Creating new UdpSessionManager with session_timeout={:?}, cleanup_interval={:?}",
             session_timeout, cleanup_interval
@@ -289,7 +286,7 @@ impl UdpSessionManager {
     }
 
     pub fn cleanup_expired_sessions(&self) -> Result<(), UdpError> {
-    let timeout = self.session_timeout;
+        let timeout = self.session_timeout;
         let mut expired_keys = Vec::new();
 
         for item in self.sessions.iter() {
@@ -314,5 +311,4 @@ impl UdpSessionManager {
         );
         Ok(())
     }
-
 }
