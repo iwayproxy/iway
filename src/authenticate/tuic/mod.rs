@@ -48,9 +48,12 @@ impl TuicAuthenticationManager {
             }
         };
 
-        connection
+        if let Err(e) = connection
             .export_keying_material(&mut buf, authenticate.uuid().as_bytes(), &password)
-            .unwrap();
+        {
+            error!("Failed to export keying material for {:?}: {:?}", authenticate.uuid(), e);
+            return Err(Error::new(ErrorKind::Other, "Failed to derive token"));
+        }
 
         if authenticate.token() == buf {
             Ok(())

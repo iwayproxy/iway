@@ -13,6 +13,8 @@ use crate::protocol::tuic::command::packet::Packet;
 
 #[derive(Error, Debug)]
 pub enum UdpError {
+    #[error("Session exceeds maximum total bytes")]
+    SessionTooLarge,
     #[error("Invalid fragment ID")]
     InvalidFragmentId,
 }
@@ -58,6 +60,7 @@ pub struct ReassemblyBuffer {
     fragments: Vec<Option<Bytes>>,
     received_bitmap: u128,
     received_count: usize,
+    total_bytes: usize,
     last_update: Instant,
 }
 
@@ -70,11 +73,21 @@ impl ReassemblyBuffer {
             fragments: vec![None; size],
             received_bitmap: 0,
             received_count: 0,
+            total_bytes: 0,
             last_update: Instant::now(),
         }
     }
 
-    pub fn insert(&mut self, frag_id: u8, payload: Bytes) -> Result<Option<Bytes>, UdpError> {
+    pub fn last_update(&self) -> Instant {
+        self.last_update
+    }
+
+    pub fn insert(
+        &mut self,
+        frag_id: u8,
+        payload: Bytes,
+        max_total_bytes: Option<usize>,
+    ) -> Result<Option<Bytes>, UdpError> {
         let idx = frag_id as usize;
         if idx >= self.fragments.len() {
             return Err(UdpError::InvalidFragmentId);
@@ -83,21 +96,39 @@ impl ReassemblyBuffer {
             return Ok(None);
         }
 
+        // enforce per-session total bytes limit if provided
+        let payload_len = payload.len();
+        if let Some(max) = max_total_bytes {
+            if self.total_bytes + payload_len > max {
+                return Err(UdpError::SessionTooLarge);
+            }
+        }
+
         self.fragments[idx] = Some(payload);
-    self.received_bitmap |= 1u128 << idx;
+        self.received_bitmap |= 1u128 << idx;
         self.received_count += 1;
+        self.total_bytes += payload_len;
         self.last_update = Instant::now();
 
         if self.received_count == self.frag_total as usize {
-            let total_len: usize = self
-                .fragments
-                .iter()
-                .map(|frag| frag.as_ref().unwrap().len())
-                .sum();
+            // compute total length, ensure no missing fragment (defensive)
+            let mut total_len: usize = 0;
+            for frag in &self.fragments {
+                if let Some(b) = frag.as_ref() {
+                    total_len += b.len();
+                } else {
+                    // inconsistent state: expected all fragments present
+                    return Err(UdpError::InvalidFragmentId);
+                }
+            }
 
             let mut full_packet = BytesMut::with_capacity(total_len);
             for frag in &self.fragments {
-                full_packet.extend_from_slice(frag.as_ref().unwrap());
+                if let Some(b) = frag.as_ref() {
+                    full_packet.extend_from_slice(b);
+                } else {
+                    return Err(UdpError::InvalidFragmentId);
+                }
             }
 
             Ok(Some(full_packet.freeze()))
@@ -116,6 +147,7 @@ impl ReassemblyBuffer {
         self.fragments.shrink_to_fit();
         self.received_bitmap = 0;
         self.received_count = 0;
+        self.total_bytes = 0;
     }
 }
 
@@ -124,6 +156,8 @@ pub struct UdpSessionManager {
     sessions: Arc<DashMap<(SocketAddr, u16), ReassemblyBuffer>>,
     session_timeout: Duration,
     cleanup_interval: Duration,
+    max_sessions: Option<usize>,
+    max_reassembly_bytes_per_session: Option<usize>,
 }
 
 impl UdpSessionManager {
@@ -140,6 +174,8 @@ impl UdpSessionManager {
             sessions: Arc::new(DashMap::new()),
             session_timeout,
             cleanup_interval,
+            max_sessions: None,
+            max_reassembly_bytes_per_session: None,
         });
 
         let schedule_manager = manager.clone();
@@ -167,7 +203,11 @@ impl UdpSessionManager {
 
         match self.sessions.entry(key) {
             Entry::Occupied(mut entry) => {
-                match entry.get_mut().insert(frag.frag_id, frag.payload) {
+                match entry.get_mut().insert(
+                    frag.frag_id,
+                    frag.payload,
+                    self.max_reassembly_bytes_per_session,
+                ) {
                     Ok(bytes_opt) => {
                         if bytes_opt.is_some() {
                             debug!("Completed packet reassembly for {:?}", key);
@@ -178,6 +218,12 @@ impl UdpSessionManager {
                     }
                     Err(e) => {
                         error!("Error inserting fragment: {}", e);
+                        // if it's a session-too-large error, drop the session to free resources
+                        if matches!(e, UdpError::SessionTooLarge) {
+                            let mut buffer = entry.remove();
+                            buffer.shrink_to_fit();
+                            debug!("Removed session {:?} due to size limit", key);
+                        }
                         None
                     }
                 }
@@ -188,9 +234,39 @@ impl UdpSessionManager {
                     return None;
                 }
 
+                // Enforce max sessions by evicting oldest sessions if configured
+                if let Some(max) = self.max_sessions {
+                    while self.sessions.len() >= max {
+                        // find the oldest session
+                        let mut oldest: Option<((SocketAddr, u16), Instant)> = None;
+                        for item in self.sessions.iter() {
+                            let k = *item.key();
+                            let lu = item.value().last_update();
+                            match &oldest {
+                                Some((_, t)) if *t <= lu => {}
+                                _ => oldest = Some((k, lu)),
+                            }
+                        }
+                        if let Some((k, _)) = oldest {
+                            if let Some((_, mut buffer)) = self.sessions.remove(&k) {
+                                buffer.shrink_to_fit();
+                                debug!("Evicted oldest UDP session {:?}", k);
+                            } else {
+                                break;
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                }
+
                 debug!("Creating new reassembly buffer for {:?}", key);
                 let mut buffer = ReassemblyBuffer::new(frag.frag_total);
-                match buffer.insert(frag.frag_id, frag.payload) {
+                match buffer.insert(
+                    frag.frag_id,
+                    frag.payload,
+                    self.max_reassembly_bytes_per_session,
+                ) {
                     Ok(Some(bytes)) => return Some(bytes),
                     Ok(None) => {
                         entry.insert(buffer);

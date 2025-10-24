@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use core::fmt;
 
 use tokio::io::{AsyncRead, AsyncReadExt};
@@ -19,7 +19,7 @@ impl Dissociate {
         let asso_id = read
             .read_u16()
             .await
-            .expect("Failed to read ASSO_ID from stream!");
+            .context("Failed to read ASSO_ID from stream!")?;
         Ok(Self { header, asso_id })
     }
 

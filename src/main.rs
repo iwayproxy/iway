@@ -25,7 +25,9 @@ static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 #[cfg(debug_assertions)]
 fn init_logging() {
-    tracing_log::LogTracer::init().expect("log tracer init failed");
+    if let Err(e) = tracing_log::LogTracer::init() {
+        eprintln!("log tracer init failed: {}", e);
+    }
 
     let subscriber = tracing_subscriber::registry()
         .with(
@@ -35,7 +37,9 @@ fn init_logging() {
         )
         .with(fmt::layer().with_filter(EnvFilter::from_default_env()));
 
-    tracing::subscriber::set_global_default(subscriber).expect("setting tracing default failed");
+    if let Err(e) = tracing::subscriber::set_global_default(subscriber) {
+        eprintln!("setting tracing default failed: {}", e);
+    }
 }
 
 fn recommended_worker_threads(cpu_load_ratio: f64) -> usize {
@@ -45,12 +49,22 @@ fn recommended_worker_threads(cpu_load_ratio: f64) -> usize {
 
 fn main() {
     let num_threads = recommended_worker_threads(1.0);
-    let _ = tokio::runtime::Builder::new_multi_thread()
+    let runtime = match tokio::runtime::Builder::new_multi_thread()
         .worker_threads(num_threads)
         .enable_all()
         .build()
-        .unwrap()
-        .block_on(async_main());
+    {
+        Ok(rt) => rt,
+        Err(e) => {
+            error!("Failed to build tokio runtime: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    if let Err(e) = runtime.block_on(async_main()) {
+        error!("Application error: {}", e);
+        std::process::exit(1);
+    }
 }
 
 // #[tokio::main(flavor = "multi_thread", worker_threads = 16)]
@@ -121,8 +135,20 @@ async fn setup_shutdown_signal() {
     {
         use tokio::signal::unix::{signal, SignalKind};
 
-        let mut sigterm = signal(SignalKind::terminate()).unwrap();
-        let mut sigint = signal(SignalKind::interrupt()).unwrap();
+        let mut sigterm = match signal(SignalKind::terminate()) {
+            Ok(s) => s,
+            Err(e) => {
+                error!("Failed to install SIGTERM handler: {}", e);
+                return;
+            }
+        };
+        let mut sigint = match signal(SignalKind::interrupt()) {
+            Ok(s) => s,
+            Err(e) => {
+                error!("Failed to install SIGINT handler: {}", e);
+                return;
+            }
+        };
 
         let _ = tokio::spawn(async move {
             tokio::select! {
@@ -141,8 +167,20 @@ async fn setup_shutdown_signal() {
     {
         use tokio::signal::windows;
 
-        let mut ctrl_c = windows::ctrl_c().unwrap();
-        let mut ctrl_break = windows::ctrl_break().unwrap();
+        let mut ctrl_c = match windows::ctrl_c() {
+            Ok(s) => s,
+            Err(e) => {
+                error!("Failed to install Ctrl+C handler: {}", e);
+                return;
+            }
+        };
+        let mut ctrl_break = match windows::ctrl_break() {
+            Ok(s) => s,
+            Err(e) => {
+                error!("Failed to install Ctrl+Break handler: {}", e);
+                return;
+            }
+        };
 
         let _ = tokio::spawn(async move {
             tokio::select! {
