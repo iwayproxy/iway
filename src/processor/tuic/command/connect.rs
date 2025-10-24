@@ -1,9 +1,9 @@
-use anyhow::{Context as AnyhowConext, Result};
+use anyhow::{Context as AnyhowContext, Result};
 use socket2::{Domain, Socket, TcpKeepalive, Type};
 use std::{
     net::SocketAddr,
     pin::Pin,
-    task::{Context, Poll},
+    task::{Context as TaskContext, Poll},
     time::Duration,
 };
 
@@ -39,7 +39,7 @@ impl ConnectProcessor {
 impl AsyncRead for ConnectProcessor {
     fn poll_read(
         self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
+        cx: &mut TaskContext<'_>,
         buf: &mut io::ReadBuf<'_>,
     ) -> Poll<std::io::Result<()>> {
         AsyncRead::poll_read(Pin::new(&mut self.get_mut().recv), cx, buf)
@@ -49,20 +49,20 @@ impl AsyncRead for ConnectProcessor {
 impl AsyncWrite for ConnectProcessor {
     fn poll_write(
         self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
+        cx: &mut TaskContext<'_>,
         buf: &[u8],
-    ) -> Poll<Result<usize, std::io::Error>> {
+    ) -> Poll<std::io::Result<usize>> {
         AsyncWrite::poll_write(Pin::new(&mut self.get_mut().send), cx, buf)
     }
 
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), std::io::Error>> {
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<std::io::Result<()>> {
         AsyncWrite::poll_flush(Pin::new(&mut self.get_mut().send), cx)
     }
 
     fn poll_shutdown(
         self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<(), std::io::Error>> {
+        cx: &mut TaskContext<'_>,
+    ) -> Poll<std::io::Result<()>> {
         AsyncWrite::poll_shutdown(Pin::new(&mut self.get_mut().send), cx)
     }
 }
@@ -75,10 +75,7 @@ impl Processor for ConnectProcessor {
             .address()
             .to_socket_address()
             .await
-            .context(format!(
-                "Failed to resolve address{}",
-                self.connect.address()
-            ))?;
+            .context(format!("Failed to resolve address {}", self.connect.address()))?;
 
         let mut tcp_stream = match connect_with_keepalive(
             socket_addr,
@@ -113,11 +110,14 @@ impl Processor for ConnectProcessor {
                 );
             }
             Err(e) => {
+                // surface as debug but attach context when returning
                 debug!("Error during TCP communication with {}: {}", socket_addr, e);
             }
         }
 
-        let _ = tcp_stream.shutdown().await;
+        if let Err(e) = tcp_stream.shutdown().await {
+            debug!("tcp_stream.shutdown() error: {}", e);
+        }
 
         Ok(())
     }

@@ -1,5 +1,5 @@
 use std::time::Duration;
-use std::{io, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
 
@@ -87,9 +87,7 @@ impl PacketProcessor {
 impl Processor for PacketProcessor {
     async fn process(&mut self) -> Result<()> {
         let dest_addr = self.packet.address.clone();
-        let fragment = UdpFragment::from_packet(&self.packet).ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidData, "Failed to parse UDP fragment")
-        })?;
+        let fragment = UdpFragment::from_packet(&self.packet);
 
         let udp_session_manager = self.udp_session_manager.clone();
         let connection = self.connection.clone();

@@ -13,8 +13,6 @@ use crate::protocol::tuic::command::packet::Packet;
 
 #[derive(Error, Debug)]
 pub enum UdpError {
-    #[error("Fragment exceeds maximum size of 128")]
-    FragmentTooLarge,
     #[error("Invalid fragment ID")]
     InvalidFragmentId,
 }
@@ -29,14 +27,14 @@ pub struct UdpFragment {
 }
 
 impl UdpFragment {
-    pub fn from_packet(packet: &Packet) -> Option<Self> {
-        Some(UdpFragment {
+    pub fn from_packet(packet: &Packet) -> Self {
+        UdpFragment {
             assoc_id: packet.assoc_id,
             pkt_id: packet.pkt_id,
             frag_id: packet.frag_id,
             frag_total: packet.frag_total,
             payload: Bytes::copy_from_slice(packet.payload.as_ref()),
-        })
+        }
     }
 }
 
@@ -81,12 +79,12 @@ impl ReassemblyBuffer {
         if idx >= self.fragments.len() {
             return Err(UdpError::InvalidFragmentId);
         }
-        if (self.received_bitmap & (1 << idx)) != 0 {
+        if (self.received_bitmap & (1u128 << idx)) != 0 {
             return Ok(None);
         }
 
         self.fragments[idx] = Some(payload);
-        self.received_bitmap |= 1 << idx;
+    self.received_bitmap |= 1u128 << idx;
         self.received_count += 1;
         self.last_update = Instant::now();
 
@@ -108,18 +106,16 @@ impl ReassemblyBuffer {
         }
     }
 
-    pub fn _is_expired(&self, timeout: Duration) -> bool {
+    pub fn is_expired(&self, timeout: Duration) -> bool {
         Instant::now().duration_since(self.last_update) > timeout
     }
 
     pub fn shrink_to_fit(&mut self) {
-        for frag in &mut self.fragments {
-            if let Some(bytes) = frag.take() {
-                drop(bytes);
-            }
-        }
+        // Clear fragments and reset counters so memory can be reclaimed
         self.fragments.clear();
         self.fragments.shrink_to_fit();
+        self.received_bitmap = 0;
+        self.received_count = 0;
     }
 }
 
@@ -187,9 +183,9 @@ impl UdpSessionManager {
                 }
             }
             Entry::Vacant(entry) => {
-                if frag.frag_total > 128 {
+                if frag.frag_total as usize > 128 {
                     error!("Fragment total exceeds maximum size: {}", frag.frag_total);
-                    return Err(UdpError::FragmentTooLarge).ok();
+                    return None;
                 }
 
                 debug!("Creating new reassembly buffer for {:?}", key);
@@ -210,32 +206,18 @@ impl UdpSessionManager {
     }
 
     pub fn remove_session(&self, client: SocketAddr, assoc_id: u16) {
-        let keys: Vec<_> = self.sessions.iter()
-            .filter_map(|entry| {
-                let (addr, entry_assoc_id) = *entry.key();
-                if addr == client && entry_assoc_id == assoc_id {
-                    Some(*entry.key())
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        for key in keys {
-            if let Some((_, mut buffer)) = self.sessions.remove(&key) {
-                buffer.shrink_to_fit();
-                debug!("Removed session for {:?}", key);
-            }
+        if let Some((_, mut buffer)) = self.sessions.remove(&(client, assoc_id)) {
+            buffer.shrink_to_fit();
+            debug!("Removed session for {:?}", (client, assoc_id));
         }
     }
 
     pub fn cleanup_expired_sessions(&self) -> Result<(), UdpError> {
-        let now = Instant::now();
-        let timeout = self.session_timeout;
+    let timeout = self.session_timeout;
         let mut expired_keys = Vec::new();
 
         for item in self.sessions.iter() {
-            if now.duration_since(item.value().last_update) >= timeout {
+            if item.value().is_expired(timeout) {
                 expired_keys.push(*item.key());
             }
         }
