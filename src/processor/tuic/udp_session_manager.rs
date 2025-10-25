@@ -220,11 +220,10 @@ impl UdpSessionManager {
                     .map(|g| *g)
                     .unwrap_or(None);
 
-                match entry.get_mut().insert(
-                    frag.frag_id,
-                    frag.payload,
-                    max_reassembly,
-                ) {
+                match entry
+                    .get_mut()
+                    .insert(frag.frag_id, frag.payload, max_reassembly)
+                {
                     Ok(bytes_opt) => {
                         if bytes_opt.is_some() {
                             debug!("Completed packet reassembly for {:?}", key);

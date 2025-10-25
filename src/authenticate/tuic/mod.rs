@@ -9,8 +9,8 @@ use log::error;
 
 use uuid::Uuid;
 
-use crate::protocol::tuic::command::authenticate::Authenticate;
 use crate::authenticate::AuthenticationConnection;
+use crate::protocol::tuic::command::authenticate::Authenticate;
 
 #[derive(Debug)]
 pub struct TuicAuthenticationManager {

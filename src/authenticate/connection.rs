@@ -1,8 +1,4 @@
-use std::{
-    fmt::Debug,
-    io::Error,
-    net::SocketAddr,
-};
+use std::{fmt::Debug, io::Error, net::SocketAddr};
 
 use async_trait::async_trait;
 
@@ -36,6 +32,11 @@ impl AuthenticationConnection for quinn::Connection {
         context: &'d [u8],
     ) -> Result<(), Error> {
         self.export_keying_material(out, label, context)
-            .map_err(|_| Error::new(std::io::ErrorKind::Other, "failed to export keying material"))
+            .map_err(|_| {
+                Error::new(
+                    std::io::ErrorKind::Other,
+                    "failed to export keying material",
+                )
+            })
     }
 }
