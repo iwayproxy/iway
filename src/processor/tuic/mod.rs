@@ -61,7 +61,8 @@ impl ConnectionProcessor for TuicConnectionProcessor {
                 Command::Authenticate(authenticate) => {
                     match self
                         .authentication_manager
-                        .authenticate(authenticate, connection.clone())
+                        .authenticate(authenticate, &connection)
+                        .await
                     {
                         Ok(_) => {
                             debug!(
