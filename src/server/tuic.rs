@@ -116,11 +116,23 @@ impl TuicServer {
             })
             .collect::<Vec<_>>();
 
+        // create processor with UDP session parameters from config
+        let udp_session_timeout = Duration::from_secs(config.udp_session_timeout);
+        let udp_cleanup_interval = Duration::from_secs(30); // keep existing default cleanup interval
+
+        let processor = Arc::new(TuicConnectionProcessor::new(
+            user_entries,
+            udp_session_timeout,
+            udp_cleanup_interval,
+            config.udp_max_sessions,
+            config.udp_max_reassembly_bytes_per_session,
+        ));
+
         Ok(Self {
             socket,
             ep: None,
             status: ServerStatus::Initializing(Instant::now()),
-            processor: Arc::new(TuicConnectionProcessor::new(user_entries)),
+            processor,
             cert_path: PathBuf::from(config.cert_path),
             key_path: PathBuf::from(config.key_path),
             shutdown_rx: shutdown_rx,

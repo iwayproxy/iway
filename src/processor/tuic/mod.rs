@@ -242,13 +242,29 @@ impl ConnectionProcessor for TuicConnectionProcessor {
     }
 }
 impl TuicConnectionProcessor {
-    pub fn new<I>(user_entries: I) -> Self
+    /// Create a new TuicConnectionProcessor.
+    ///
+    /// - `user_entries`: iterator of (Uuid, password)
+    /// - `udp_session_timeout`: per-session reassembly timeout
+    /// - `udp_cleanup_interval`: periodic cleanup interval
+    /// - `max_sessions`: optional cap for concurrent UDP sessions
+    /// - `max_reassembly_bytes_per_session`: optional cap for reassembly bytes per session
+    pub fn new<I>(
+        user_entries: I,
+        udp_session_timeout: Duration,
+        udp_cleanup_interval: Duration,
+        max_sessions: Option<usize>,
+        max_reassembly_bytes_per_session: Option<usize>,
+    ) -> Self
     where
         I: IntoIterator<Item = (uuid::Uuid, String)>,
     {
         let authentication_manager = Arc::new(TuicAuthenticationManager::new(user_entries));
-        let udp_session_manager =
-            UdpSessionManager::new(Duration::from_secs(10), Duration::from_secs(30));
+        let udp_session_manager = UdpSessionManager::new(udp_session_timeout, udp_cleanup_interval);
+
+        // apply optional limits
+        udp_session_manager.set_max_sessions(max_sessions);
+        udp_session_manager.set_max_reassembly_bytes_per_session(max_reassembly_bytes_per_session);
 
         Self {
             authentication_manager,

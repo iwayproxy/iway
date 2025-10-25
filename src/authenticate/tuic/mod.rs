@@ -76,19 +76,22 @@ impl TuicAuthenticationManager {
             Some(password) => password,
             None => {
                 error!(
-                    "Failed to authenticate, user not found: {}",
-                    authenticate.uuid()
+                    "Failed to authenticate (user not found) uuid={} from={} ",
+                    authenticate.uuid(),
+                    connection.remote_address()
                 );
                 return Err(Error::new(ErrorKind::Other, "User not found"));
             }
         };
 
-        if let Err(e) =
-            connection.export_keying_material(&mut buf, authenticate.uuid().as_bytes(), &password).await
+        if let Err(e) = connection
+            .export_keying_material(&mut buf, authenticate.uuid().as_bytes(), &password)
+            .await
         {
             error!(
-                "Failed to export keying material for {:?}: {:?}",
+                "Failed to export keying material for uuid={} from={} err={:?}",
                 authenticate.uuid(),
+                connection.remote_address(),
                 e
             );
             return Err(Error::new(ErrorKind::Other, "Failed to derive token"));
@@ -98,12 +101,13 @@ impl TuicAuthenticationManager {
         let uuid = authenticate.uuid();
         if let Some(mut attempts) = self.failed_attempts.get_mut(&uuid) {
             if attempts.count >= Self::MAX_FAILED_ATTEMPTS {
-                // Check if we should reset based on time elapsed
+                // Check if we should reset based on time elapsed (1 hour window)
                 if attempts.first_failure.elapsed() <= std::time::Duration::from_secs(3600) {
                     error!(
-                        "Too many failed attempts for UUID {} from {}",
+                        "Too many failed attempts for uuid={} from={} attempts={}",
                         uuid,
-                        connection.remote_address()
+                        connection.remote_address(),
+                        attempts.count
                     );
                     return Err(Error::new(ErrorKind::Other, "Too many failed attempts"));
                 }
@@ -128,12 +132,13 @@ impl TuicAuthenticationManager {
             };
 
             error!(
-                "Unathenticated access from {} (token mismatch, attempt {}/{})",
+                "Unauthenticated access from={} uuid={} (token mismatch, attempt {}/{})",
                 connection.remote_address(),
+                uuid,
                 count,
                 Self::MAX_FAILED_ATTEMPTS
             );
-            Err(Error::new(ErrorKind::Other, "Unathenticated access"))
+            Err(Error::new(ErrorKind::Other, "Unauthenticated access"))
         }
     }
 }

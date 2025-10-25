@@ -156,8 +156,8 @@ pub struct UdpSessionManager {
     sessions: Arc<DashMap<(SocketAddr, u16), ReassemblyBuffer>>,
     session_timeout: Duration,
     cleanup_interval: Duration,
-    max_sessions: Option<usize>,
-    max_reassembly_bytes_per_session: Option<usize>,
+    max_sessions: std::sync::Arc<std::sync::Mutex<Option<usize>>>,
+    max_reassembly_bytes_per_session: std::sync::Arc<std::sync::Mutex<Option<usize>>>,
 }
 
 impl UdpSessionManager {
@@ -171,8 +171,8 @@ impl UdpSessionManager {
             sessions: Arc::new(DashMap::new()),
             session_timeout,
             cleanup_interval,
-            max_sessions: None,
-            max_reassembly_bytes_per_session: None,
+            max_sessions: std::sync::Arc::new(std::sync::Mutex::new(None)),
+            max_reassembly_bytes_per_session: std::sync::Arc::new(std::sync::Mutex::new(None)),
         });
 
         let schedule_manager = manager.clone();
@@ -191,6 +191,20 @@ impl UdpSessionManager {
         manager
     }
 
+    /// Set the maximum number of concurrent sessions. If None, no hard limit is enforced.
+    pub fn set_max_sessions(&self, max: Option<usize>) {
+        if let Ok(mut guard) = self.max_sessions.lock() {
+            *guard = max;
+        }
+    }
+
+    /// Set the maximum total reassembly bytes per session. If None, no per-session byte limit is enforced.
+    pub fn set_max_reassembly_bytes_per_session(&self, max: Option<usize>) {
+        if let Ok(mut guard) = self.max_reassembly_bytes_per_session.lock() {
+            *guard = max;
+        }
+    }
+
     pub fn receive_fragment(&self, frag: UdpFragment, client: SocketAddr) -> Option<Bytes> {
         let key = (client, frag.assoc_id);
         debug!(
@@ -200,10 +214,16 @@ impl UdpSessionManager {
 
         match self.sessions.entry(key) {
             Entry::Occupied(mut entry) => {
+                let max_reassembly = self
+                    .max_reassembly_bytes_per_session
+                    .lock()
+                    .map(|g| *g)
+                    .unwrap_or(None);
+
                 match entry.get_mut().insert(
                     frag.frag_id,
                     frag.payload,
-                    self.max_reassembly_bytes_per_session,
+                    max_reassembly,
                 ) {
                     Ok(bytes_opt) => {
                         if bytes_opt.is_some() {
@@ -232,7 +252,8 @@ impl UdpSessionManager {
                 }
 
                 // Enforce max sessions by evicting oldest sessions if configured
-                if let Some(max) = self.max_sessions {
+                let max_sessions = self.max_sessions.lock().map(|g| *g).unwrap_or(None);
+                if let Some(max) = max_sessions {
                     while self.sessions.len() >= max {
                         // find the oldest session
                         let mut oldest: Option<((SocketAddr, u16), Instant)> = None;
@@ -259,11 +280,13 @@ impl UdpSessionManager {
 
                 debug!("Creating new reassembly buffer for {:?}", key);
                 let mut buffer = ReassemblyBuffer::new(frag.frag_total);
-                match buffer.insert(
-                    frag.frag_id,
-                    frag.payload,
-                    self.max_reassembly_bytes_per_session,
-                ) {
+                let max_reassembly = self
+                    .max_reassembly_bytes_per_session
+                    .lock()
+                    .map(|g| *g)
+                    .unwrap_or(None);
+
+                match buffer.insert(frag.frag_id, frag.payload, max_reassembly) {
                     Ok(Some(bytes)) => return Some(bytes),
                     Ok(None) => {
                         entry.insert(buffer);

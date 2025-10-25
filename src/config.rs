@@ -21,6 +21,12 @@ pub struct Config {
 
     pub key_path: String,
 
+    // Optional limits for UDP session management
+    // If set to None, the defaults in code apply (unbounded or conservative defaults)
+    pub udp_max_sessions: Option<usize>,
+
+    pub udp_max_reassembly_bytes_per_session: Option<usize>,
+
     pub users: Vec<UserConfig>,
 }
 
@@ -32,6 +38,8 @@ impl Default for Config {
             udp_socket_timeout: 60,
             cert_path: "server.crt".to_string(),
             key_path: "server.key".to_string(),
+            udp_max_sessions: None,
+            udp_max_reassembly_bytes_per_session: None,
             users: vec![],
         }
     }

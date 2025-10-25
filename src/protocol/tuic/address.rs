@@ -6,7 +6,7 @@ use std::{
 };
 
 use anyhow::{Ok, Result, bail};
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 use log::debug;
 use tokio::{
     io::{AsyncRead, AsyncReadExt},
@@ -85,16 +85,15 @@ impl Address {
             AddressType::Domain => {
                 let len = read.read_u8().await?;
 
-                let mut cache = BytesMut::new();
+                let mut cache = BytesMut::with_capacity(1 + 1 + len as usize + 2);
                 cache.put_u8(address_type as u8);
                 cache.put_u8(len);
 
-                let mut domain_bytes = BytesMut::with_capacity(len as usize);
-                let _ = read.read_buf(&mut domain_bytes).await?;
+                let mut domain_bytes = vec![0u8; len as usize];
+                read.read_exact(&mut domain_bytes).await?;
+                cache.put_slice(&domain_bytes);
 
-                cache.put(domain_bytes.chunk());
-
-                let address = str::from_utf8(domain_bytes.chunk())?.to_string();
+                let address = str::from_utf8(&domain_bytes)?.to_string();
 
                 let port = read.read_u16().await?;
                 cache.put_u16(port);
@@ -102,7 +101,7 @@ impl Address {
                 Ok(Address::DomainAddress(address, port, cache.freeze()))
             }
             AddressType::IpV4 => {
-                let mut cache = BytesMut::new();
+                let mut cache = BytesMut::with_capacity(1 + 4 + 2);
                 cache.put_u8(address_type as u8);
 
                 let ip_value = read.read_u32().await?;
@@ -115,7 +114,7 @@ impl Address {
                 Ok(Address::SocketAddress(socket_addr, cache.freeze()))
             }
             AddressType::IpV6 => {
-                let mut cache = BytesMut::new();
+                let mut cache = BytesMut::with_capacity(1 + 16 + 2);
                 cache.put_u8(address_type.to_byte());
 
                 let ip_value = read.read_u128().await?;

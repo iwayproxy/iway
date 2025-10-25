@@ -89,11 +89,11 @@ impl Packet {
             .context("Failed to read size from stream")?;
         let address = Address::read_from(r).await?;
 
-        let mut payload = BytesMut::with_capacity(size as usize);
-        r.read_buf(&mut payload)
+        let mut payload_vec = vec![0u8; size as usize];
+        r.read_exact(&mut payload_vec)
             .await
             .context("Failed to read payload from stream")?;
-        let payload = payload.freeze();
+        let payload = Bytes::from(payload_vec);
 
         Ok(Self {
             header,
