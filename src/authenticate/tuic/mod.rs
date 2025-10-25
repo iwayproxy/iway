@@ -15,20 +15,55 @@ use crate::protocol::tuic::command::authenticate::Authenticate;
 #[derive(Debug)]
 pub struct TuicAuthenticationManager {
     users: Arc<DashMap<Uuid, Box<[u8]>>>,
+    // Track failed attempts per UUID
+    failed_attempts: Arc<DashMap<Uuid, FailedAttempts>>,
+}
+
+/// Track authentication failures with timestamp for auto-reset
+#[derive(Debug)]
+struct FailedAttempts {
+    count: u32,
+    first_failure: std::time::Instant,
+}
+
+impl FailedAttempts {
+    fn new() -> Self {
+        Self {
+            count: 1,
+            first_failure: std::time::Instant::now(),
+        }
+    }
+
+    fn increment(&mut self) -> u32 {
+        // If too old, reset counter
+        if self.first_failure.elapsed() > std::time::Duration::from_secs(3600) {
+            self.count = 0;
+            self.first_failure = std::time::Instant::now();
+        }
+        self.count += 1;
+        self.count
+    }
 }
 
 impl TuicAuthenticationManager {
+    // Maximum failed attempts within the time window
+    const MAX_FAILED_ATTEMPTS: u32 = 5;
+
     pub fn new<I>(user_entries: I) -> Self
     where
         I: IntoIterator<Item = (Uuid, String)>,
     {
         let users: Arc<DashMap<Uuid, Box<[u8]>>> = Arc::new(DashMap::new());
+        let failed_attempts: Arc<DashMap<Uuid, FailedAttempts>> = Arc::new(DashMap::new());
 
         for (uuid, password) in user_entries {
             users.insert(uuid, Box::from(password.as_bytes()));
         }
 
-        TuicAuthenticationManager { users }
+        TuicAuthenticationManager {
+            users,
+            failed_attempts,
+        }
     }
 
     pub fn authenticate(
@@ -59,13 +94,44 @@ impl TuicAuthenticationManager {
             return Err(Error::new(ErrorKind::Other, "Failed to derive token"));
         }
 
-        if authenticate.token() == buf {
+        // First check if this UUID is rate limited
+        let uuid = authenticate.uuid();
+        if let Some(mut attempts) = self.failed_attempts.get_mut(&uuid) {
+            if attempts.count >= Self::MAX_FAILED_ATTEMPTS {
+                // Check if we should reset based on time elapsed
+                if attempts.first_failure.elapsed() <= std::time::Duration::from_secs(3600) {
+                    error!(
+                        "Too many failed attempts for UUID {} from {}",
+                        uuid,
+                        connection.remote_address()
+                    );
+                    return Err(Error::new(ErrorKind::Other, "Too many failed attempts"));
+                }
+                // Reset counter if time window passed
+                attempts.count = 0;
+                attempts.first_failure = std::time::Instant::now();
+            }
+        }
+
+        if authenticate.verify_token(&buf) {
+            // On success, remove failed attempts record
+            self.failed_attempts.remove(&uuid);
             Ok(())
         } else {
+            // Increment or initialize failed attempts counter
+            let count = match self.failed_attempts.get_mut(&uuid) {
+                Some(mut attempts) => attempts.increment(),
+                None => {
+                    self.failed_attempts.insert(uuid, FailedAttempts::new());
+                    1
+                }
+            };
+
             error!(
-                "Unathenticated access from {} {:?}",
+                "Unathenticated access from {} (token mismatch, attempt {}/{})",
                 connection.remote_address(),
-                authenticate.token()
+                count,
+                Self::MAX_FAILED_ATTEMPTS
             );
             Err(Error::new(ErrorKind::Other, "Unathenticated access"))
         }

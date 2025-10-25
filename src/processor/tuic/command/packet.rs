@@ -35,6 +35,7 @@ impl PacketProcessor {
             connection,
         }
     }
+
     pub async fn send_and_receive(&mut self, dest: Address, data: &[u8]) -> Result<Vec<u8>> {
         let Some(dest_socket_addr) = dest.to_socket_address().await else {
             bail!("Failed to resolve address to dest socket address {}", dest);
