@@ -44,18 +44,29 @@ impl OneShotNotifier {
     }
 
     pub async fn wait(&self) -> Option<NotifyState> {
-        loop {
-            {
+        // 使用默认的10秒超时
+        self.wait_timeout(Duration::from_secs(10)).await
+    }
+
+    /// Wait for a notification but return None on timeout.
+    ///
+    /// Returns `Some(NotifyState)` if a notification was received before the timeout,
+    /// or `None` if the timeout elapsed.
+    pub async fn wait_timeout(&self, dur: Duration) -> Option<NotifyState> {
+        match timeout(dur, async {
+            loop {
                 let guard = self.state.lock().await;
                 if let Some(val) = &*guard {
                     return Some(val.clone());
                 }
+                drop(guard);
+                self.notify.notified().await;
             }
-            self.notify.notified().await;
+        })
+        .await
+        {
+            Ok(result) => result,
+            Err(_) => None,
         }
-    }
-
-    pub async fn _wait_timeout(&self, dur: Duration) -> Option<NotifyState> {
-        timeout(dur, self.wait()).await.ok().flatten()
     }
 }
