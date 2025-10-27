@@ -45,7 +45,7 @@ impl OneShotNotifier {
 
     pub async fn wait(&self) -> Option<NotifyState> {
         // 使用默认的10秒超时
-        self.wait_timeout(Duration::from_secs(10)).await
+        self.wait_timeout(Duration::from_secs(3)).await
     }
 
     /// Wait for a notification but return None on timeout.

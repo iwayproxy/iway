@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use log::debug;
 use quinn::{RecvStream, SendStream};
 use tokio::{
-    io::{self, AsyncRead, AsyncWrite, AsyncWriteExt},
+    io::{self, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     net::TcpStream,
 };
 use tokio_util::compat::TokioAsyncReadCompatExt;
@@ -119,6 +119,11 @@ impl Processor for ConnectProcessor {
             debug!("tcp_stream.shutdown() error: {}", e);
         }
 
+        let mut buf = Vec::new();
+        let _ = tcp_stream.read_to_end(&mut buf).await;
+
+        drop(tcp_stream);
+
         Ok(())
     }
 }
@@ -154,6 +159,8 @@ pub async fn connect_with_keepalive(
             format!("Connect failed target:{:?} error: {}", addr, e),
         ));
     }
+
+    stream.set_linger(Some(Duration::from_secs(5)))?;
 
     Ok(stream)
 }
