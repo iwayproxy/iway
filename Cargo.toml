@@ -20,7 +20,7 @@ rustls-pemfile = "2.2.0"
 uuid = "1.18.1"
 libc = "0.2.177"
 env_logger = "0.11.8"
-console-subscriber = "0.4.1"
+console-subscriber = "0.5.0"
 tracing = "0.1.41"
 tracing-subscriber = "0.3.20"
 tracing-log = "0.2.0"
@@ -43,11 +43,12 @@ tracing-log = "0.2.0"
 [target.'cfg(windows)'.dependencies]
 
 [profile.release]
-strip = true
-opt-level = "z"
-lto = true
-panic = "abort"
+opt-level = 3
+lto = "fat"
 codegen-units = 1
+panic = "abort"
+strip = true
+debug = false
 
 [dev-dependencies]
 criterion = "0.7.0"

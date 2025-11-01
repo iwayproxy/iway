@@ -81,7 +81,7 @@ impl Processor for ConnectProcessor {
             socket_addr,
             Duration::from_secs(5),
             Duration::from_secs(2),
-            2,
+            1,
         )
         .await
         {
@@ -113,6 +113,10 @@ impl Processor for ConnectProcessor {
                 // surface as debug but attach context when returning
                 debug!("Error during TCP communication with {}: {}", socket_addr, e);
             }
+        }
+
+        if let Err(e) = tcp_stream.flush().await {
+            debug!("tcp_stream.flush() error: {}", e);
         }
 
         if let Err(e) = tcp_stream.shutdown().await {
@@ -150,17 +154,15 @@ pub async fn connect_with_keepalive(
         Err(e) => return Err(e),
     }
 
-    let stream = TcpStream::from_std(socket.into())?;
-    stream.writable().await?;
+    socket.set_linger(Some(Duration::from_secs(5)))?;
 
-    if let Err(e) = stream.peer_addr() {
+    let stream = TcpStream::from_std(socket.into())?;
+    if let Err(e) = stream.writable().await {
         return Err(std::io::Error::new(
             std::io::ErrorKind::NotConnected,
             format!("Connect failed target:{:?} error: {}", addr, e),
         ));
-    }
-
-    stream.set_linger(Some(Duration::from_secs(5)))?;
+    };
 
     Ok(stream)
 }
