@@ -11,7 +11,7 @@ use crate::protocol::tuic::address::Address;
 use crate::protocol::tuic::command::packet::Packet;
 use async_trait::async_trait;
 use bytes::BytesMut;
-use log::debug;
+use tracing::debug;
 use quinn::Connection;
 use tokio::net::UdpSocket;
 

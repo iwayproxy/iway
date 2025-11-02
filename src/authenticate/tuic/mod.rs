@@ -5,8 +5,7 @@ use std::{
 };
 
 use dashmap::DashMap;
-use log::error;
-
+use tracing::error;
 use uuid::Uuid;
 
 use crate::authenticate::AuthenticationConnection;

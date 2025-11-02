@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use log::debug;
+use tracing::debug;
 use quinn::Connection;
 use std::sync::Arc;
 

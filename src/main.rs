@@ -1,17 +1,16 @@
 use anyhow::Result;
 
-#[cfg(debug_assertions)]
-use console_subscriber::ConsoleLayer;
 use tokio::sync::watch;
-#[cfg(debug_assertions)]
-use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
-use log::{error, info};
+use tracing::{error, info};
 use server::ServerManager;
 use std::{cmp::max, env, time::Instant};
 
-#[cfg(all(not(windows), not(target_env = "msvc")))]
-use jemallocator;
+use tracing_appender::rolling;
+use tracing_subscriber::{Layer, fmt, layer::SubscriberExt, util::SubscriberInitExt};
+
+#[cfg(not(target_env = "msvc"))]
+use tikv_jemallocator::Jemalloc;
 
 mod authenticate;
 mod config;
@@ -19,27 +18,43 @@ mod processor;
 mod protocol;
 mod server;
 
-#[cfg(all(not(windows), not(target_env = "msvc")))]
+#[cfg(not(target_env = "msvc"))]
 #[global_allocator]
-static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+static GLOBAL: Jemalloc = Jemalloc;
 
-#[cfg(debug_assertions)]
-fn init_logging() {
-    if let Err(e) = tracing_log::LogTracer::init() {
-        eprintln!("log tracer init failed: {}", e);
-    }
+fn init_logger() {
+    // 1️⃣ 文件轮转：按天滚动日志（logs/iway.log）
+    let file_appender = rolling::daily("logs", "iway.log");
 
-    let subscriber = tracing_subscriber::registry()
-        .with(
-            ConsoleLayer::builder()
-                .retention(std::time::Duration::from_secs(60))
-                .spawn(),
-        )
-        .with(fmt::layer().with_filter(EnvFilter::from_default_env()));
+    // 2️⃣ 文件日志层
+    let file_layer = fmt::layer()
+        .with_writer(file_appender)
+        .with_ansi(false) // 文件中不使用彩色
+        .with_target(false)
+        .with_level(true)
+        .with_line_number(true)
+        .with_thread_names(true)
+        .with_filter(tracing_subscriber::filter::LevelFilter::INFO);
 
-    if let Err(e) = tracing::subscriber::set_global_default(subscriber) {
-        eprintln!("setting tracing default failed: {}", e);
-    }
+    // 3️⃣ 控制台日志层
+    #[cfg(debug_assertions)]
+    let console_layer = fmt::layer()
+        .with_target(false)
+        .with_line_number(true)
+        .pretty()
+        .with_filter(tracing_subscriber::filter::LevelFilter::DEBUG);
+
+    #[cfg(not(debug_assertions))]
+    let console_layer = fmt::layer()
+        .with_target(false)
+        .with_line_number(true)
+        .pretty()
+        .with_filter(tracing_subscriber::filter::LevelFilter::WARN);
+    // 4️⃣ 组合两个层
+    tracing_subscriber::registry()
+        .with(console_layer)
+        .with(file_layer)
+        .init();
 }
 
 fn recommended_worker_threads(cpu_load_ratio: f64) -> usize {
@@ -48,6 +63,8 @@ fn recommended_worker_threads(cpu_load_ratio: f64) -> usize {
 }
 
 fn main() {
+    init_logger();
+
     let num_threads = recommended_worker_threads(1.0);
     let runtime = match tokio::runtime::Builder::new_multi_thread()
         .worker_threads(num_threads)
@@ -69,12 +86,6 @@ fn main() {
 
 // #[tokio::main(flavor = "multi_thread", worker_threads = 16)]
 async fn async_main() -> Result<()> {
-    #[cfg(debug_assertions)]
-    init_logging();
-
-    #[cfg(not(debug_assertions))]
-    env_logger::init();
-
     let start_time = Instant::now();
 
     let config_path = env::args()

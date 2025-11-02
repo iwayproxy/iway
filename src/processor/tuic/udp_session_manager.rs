@@ -1,6 +1,6 @@
 use bytes::{Bytes, BytesMut};
 use dashmap::{DashMap, mapref::entry::Entry};
-use log::{debug, error, info};
+use tracing::{debug, error, info};
 use std::{
     net::SocketAddr,
     sync::Arc,

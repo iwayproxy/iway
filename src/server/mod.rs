@@ -1,7 +1,7 @@
 use std::{collections::HashMap, io::Error, sync::Arc, time::Instant};
 
 use async_trait::async_trait;
-use log::{error, info};
+use tracing::{error, info};
 use tokio::sync::{Mutex, watch::Receiver};
 use tuic::TuicServer;
 

@@ -7,7 +7,7 @@ use std::{
 
 use anyhow::{Ok, Result, bail};
 use bytes::{BufMut, Bytes, BytesMut};
-use log::debug;
+use tracing::debug;
 use tokio::{
     io::{AsyncRead, AsyncReadExt},
     net,

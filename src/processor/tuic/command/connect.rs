@@ -8,7 +8,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use log::debug;
+use tracing::debug;
 use quinn::{RecvStream, SendStream};
 use tokio::{
     io::{self, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},

@@ -13,7 +13,7 @@ use command::connect::ConnectProcessor;
 use command::heartbeat::HeartbeatProcessor;
 use command::{NotifyState, OneShotNotifier};
 
-use log::{debug, error};
+use tracing::{debug, error};
 use quinn::{Connection, VarInt};
 
 use crate::authenticate::tuic::TuicAuthenticationManager;

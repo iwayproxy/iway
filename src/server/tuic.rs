@@ -12,7 +12,7 @@ use crate::processor::tuic::command::{NotifyState, OneShotNotifier};
 use super::{Server, ServerStatus};
 
 use async_trait::async_trait;
-use log::{debug, info};
+use tracing::{debug, info};
 use quinn::congestion::BbrConfig;
 use quinn::crypto::rustls::QuicServerConfig;
 use quinn::{Endpoint, EndpointConfig, ServerConfig, TokioRuntime, TransportConfig, VarInt};
