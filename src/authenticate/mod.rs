@@ -1,4 +1,4 @@
 mod connection;
 pub mod tuic;
 
-pub use connection::AuthenticationConnection;
+use connection::AuthenticationConnection;
