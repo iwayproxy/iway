@@ -317,6 +317,7 @@ impl UdpSessionManager {
             }
         }
 
+        let total_count = self.sessions.len();
         let initial_count = expired_keys.len();
         let mut cleaned_count = 0;
 
@@ -328,8 +329,8 @@ impl UdpSessionManager {
         }
 
         debug!(
-            "Cleaned up {}/{} expired sessions",
-            cleaned_count, initial_count
+            "Cleaned up {}/{} expired sessions, {} sessions in total.",
+            cleaned_count, initial_count, total_count
         );
         Ok(())
     }

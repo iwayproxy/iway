@@ -128,6 +128,8 @@ async fn async_main() -> Result<()> {
     let shutdown = setup_shutdown_signal();
     shutdown.await;
 
+    let stop_time = Instant::now();
+
     let _ = shutdown_tx.send(());
 
     info!("Received shutdown signal, stopping servers...");
@@ -135,7 +137,7 @@ async fn async_main() -> Result<()> {
 
     info!(
         "ServerManager: Servers stopped in {:?}",
-        start_time.elapsed()
+        stop_time.elapsed()
     );
 
     Ok(())

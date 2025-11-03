@@ -35,6 +35,7 @@ subtle = "2.5"
 
 [target.'cfg(unix)'.dependencies]
 tikv-jemallocator = "0.6.1"
+#tikv-jemalloc-ctl = { version = "0.6.1", features = ["stats"]}
 
 [target.'cfg(windows)'.dependencies]
 
