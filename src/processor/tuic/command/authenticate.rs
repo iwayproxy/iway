@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
-use anyhow::{Ok, Result};
+use anyhow::Result;
 
 use quinn::Connection;
+use tracing::error;
 
 use crate::{authenticate::{tuic::TuicAuthenticationManager}, protocol::tuic::command::authenticate::Authenticate};
 
@@ -17,9 +18,25 @@ impl AuthenticateProcessor {
         Self { authenticate, connection, authenticate_manager }
     }
 
-    pub fn verify(&self) -> Result<()>{
+    pub fn verify(&self) -> Result<bool>{
+        let password = match self.authenticate_manager.password(self.authenticate.uuid()) {
+            Ok(value) => value,
+            Err(_) => todo!(),
+        };
 
-        Ok(())
+        let mut buff :[u8; 32] = [0; 32];
+        if let Err(e) = self.connection
+            .export_keying_material(&mut buff, self.authenticate.uuid().as_bytes(), &password)
+        {
+            error!(
+                "Failed to export keying material for uuid={} from={} err={:?}",
+                self.authenticate.uuid(),
+                self.connection.remote_address(),
+                e
+            );
+            return Err(anyhow::anyhow!(""));
+        }
+
+        Ok(self.authenticate.verify_token(&buff))
     }
 }
-
