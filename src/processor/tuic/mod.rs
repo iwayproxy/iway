@@ -13,12 +13,13 @@ use command::connect::ConnectProcessor;
 use command::heartbeat::HeartbeatProcessor;
 use command::{NotifyState, OneShotNotifier};
 
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 use quinn::{Connection, VarInt};
 
 use crate::authenticate::tuic::TuicAuthenticationManager;
 use crate::processor::ConnectionProcessor;
 use crate::processor::tuic::command::Processor;
+use crate::processor::tuic::command::authenticate::AuthenticateProcessor;
 use crate::protocol::tuic::command::command::Command;
 use command::packet::PacketProcessor;
 
@@ -57,13 +58,11 @@ impl ConnectionProcessor for TuicConnectionProcessor {
                 break;
             };
 
+            let authentication_manager = self.authentication_manager.clone();
+
             match command {
                 Command::Authenticate(authenticate) => {
-                    match self
-                        .authentication_manager
-                        .authenticate(authenticate, &connection)
-                        .await
-                    {
+                    match AuthenticateProcessor::new(authenticate, connection.clone(), authentication_manager).verify() {
                         Ok(_) => {
                             debug!(
                                 "Successful to authenticate client, address: {}",
@@ -72,7 +71,7 @@ impl ConnectionProcessor for TuicConnectionProcessor {
                             notifier.notify(NotifyState::Success).await;
                         }
                         Err(e) => {
-                            debug!("Failed to authenticate: {}", e);
+                            info!("Failed to authenticate: {}", e);
                             notifier.notify(NotifyState::Failure).await;
                             continue;
                         }

@@ -1,3 +1,4 @@
+pub mod authenticate;
 pub mod connect;
 pub mod dissociate;
 pub mod heartbeat;

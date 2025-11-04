@@ -5,10 +5,11 @@ use std::{
 };
 
 use dashmap::DashMap;
+use quinn::Connection;
 use tracing::error;
 use uuid::Uuid;
 
-use crate::authenticate::AuthenticationConnection;
+// use crate::authenticate::AuthenticationConnection;
 use crate::protocol::tuic::command::authenticate::Authenticate;
 
 #[derive(Debug)]
@@ -68,7 +69,7 @@ impl TuicAuthenticationManager {
     pub async fn authenticate(
         &self,
         authenticate: Authenticate,
-        connection: &impl AuthenticationConnection,
+        connection: Connection,
     ) -> Result<(), Error> {
         let mut buf: [u8; 32] = [0; 32];
         let password = match self.users.get(&authenticate.uuid()) {
@@ -85,7 +86,6 @@ impl TuicAuthenticationManager {
 
         if let Err(e) = connection
             .export_keying_material(&mut buf, authenticate.uuid().as_bytes(), &password)
-            .await
         {
             error!(
                 "Failed to export keying material for uuid={} from={} err={:?}",
