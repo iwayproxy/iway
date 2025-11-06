@@ -1,3 +1,10 @@
+#[cfg(not(target_env = "msvc"))]
+use tikv_jemallocator::Jemalloc;
+
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
+
 use anyhow::Result;
 
 use tokio::sync::watch;
@@ -9,18 +16,11 @@ use std::{cmp::max, env, time::Instant};
 use tracing_appender::rolling;
 use tracing_subscriber::{Layer, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
-#[cfg(not(target_env = "msvc"))]
-use tikv_jemallocator::Jemalloc;
-
 mod authenticate;
 mod config;
 mod processor;
 mod protocol;
 mod server;
-
-#[cfg(not(target_env = "msvc"))]
-#[global_allocator]
-static GLOBAL: Jemalloc = Jemalloc;
 
 fn init_logger() {
     // 1️⃣ 文件轮转：按天滚动日志（logs/iway.log）

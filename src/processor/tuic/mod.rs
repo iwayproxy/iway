@@ -18,15 +18,18 @@ use quinn::{Connection, VarInt};
 
 use crate::authenticate::tuic::TuicAuthenticationManager;
 use crate::processor::ConnectionProcessor;
-use crate::processor::tuic::command::Processor;
 use crate::processor::tuic::command::authenticate::AuthenticateProcessor;
 use crate::protocol::tuic::command::command::Command;
 use command::packet::PacketProcessor;
 
-#[derive(Debug)]
+// #[derive(Debug)]
 pub struct TuicConnectionProcessor {
-    authentication_manager: Arc<TuicAuthenticationManager>,
     udp_session_manager: Arc<UdpSessionManager>,
+    authenticate_processor: Arc<AuthenticateProcessor>,
+    connect_processor: Arc<ConnectProcessor>,
+    dissociate_processor: Arc<DissociateProcess>,
+    heartbeat_processor: Arc<HeartbeatProcessor>,
+    packet_processor: Arc<PacketProcessor>,
 }
 
 #[async_trait]
@@ -58,11 +61,9 @@ impl ConnectionProcessor for TuicConnectionProcessor {
                 break;
             };
 
-            let authentication_manager = self.authentication_manager.clone();
-
             match command {
                 Command::Authenticate(authenticate) => {
-                    match AuthenticateProcessor::new(authenticate, connection.clone(), authentication_manager).verify() {
+                    match self.authenticate_processor.verify(authenticate, connection.clone()) {
                         Ok(_) => {
                             debug!(
                                 "Successful to authenticate client, address: {}",
@@ -84,15 +85,11 @@ impl ConnectionProcessor for TuicConnectionProcessor {
                         match state {
                             NotifyState::Success => {
                                 debug!("Received packet from {}", connection.remote_address());
-                                let udp_session_manager = Arc::clone(&self.udp_session_manager);
-                                let connection = Arc::new(connection.clone());
+                                let packet_processor = Arc::clone(&self.packet_processor);
+                                let connection = connection.clone();
+
                                 tokio::spawn(async move {
-                                    match PacketProcessor::new(
-                                        packet,
-                                        udp_session_manager,
-                                        connection,
-                                    )
-                                    .process()
+                                    match packet_processor.process(connection, packet)
                                     .await
                                     .context("Failed to handle packet from uni-stream.")
                                     {
@@ -123,14 +120,9 @@ impl ConnectionProcessor for TuicConnectionProcessor {
                                     remote, dissociate
                                 );
                                 let connection = connection.clone();
-                                let session_manager = Arc::clone(&self.udp_session_manager);
+                                let dissociate_processor = Arc::clone(&self.dissociate_processor);
                                 tokio::spawn(async move {
-                                    let _ = DissociateProcess::new(
-                                        connection,
-                                        dissociate,
-                                        session_manager,
-                                    )
-                                    .process()
+                                    let _ = dissociate_processor.process(connection, dissociate)
                                     .await;
                                 });
                             }
@@ -154,10 +146,10 @@ impl ConnectionProcessor for TuicConnectionProcessor {
     }
 
     async fn process_bidirectional(&self, connection: Connection) -> io::Result<()> {
-        let connection = Arc::new(connection);
         while let Ok((send, mut recv)) = connection.accept_bi().await {
             let remote = connection.remote_address();
             let connection = connection.clone();
+            let connect_processor = Arc::clone(&self.connect_processor);
 
             let processing = async move {
                 let command = match Command::read_from(&mut recv).await {
@@ -174,7 +166,7 @@ impl ConnectionProcessor for TuicConnectionProcessor {
                     Command::Connect(connect) => {
                         tokio::spawn(async move {
                             if let Err(e) =
-                                ConnectProcessor::new(send, recv, connect).process().await
+                                connect_processor.process(send, recv, connect).await
                             {
                                 debug!("Failed to process Connect command: {}", e);
                             }
@@ -199,35 +191,33 @@ impl ConnectionProcessor for TuicConnectionProcessor {
     }
 
     async fn process_datagram(&self, connection: Connection) -> io::Result<()> {
-        let connection = Arc::new(connection);
-
         while let Ok(bytes) = connection.read_datagram().await {
             let mut cursor = Cursor::new(&bytes);
             match Command::read_from(&mut cursor).await {
                 Ok(Command::Packet(packet)) => {
-                    let connection = Arc::clone(&connection);
-                    let udp_session_manager = Arc::clone(&self.udp_session_manager);
+                    let connection = connection.clone();
+                    let packet_processor = Arc::clone(&self.packet_processor);
                     tokio::spawn(async move {
                         if let Err(e) =
-                            PacketProcessor::new(packet, udp_session_manager, connection)
-                                .process()
-                                .await
+                            packet_processor.process(connection, packet).await
                         {
                             debug!("Failed to process datagram packet: {}", e);
                         }
                     });
                 }
+
                 Ok(Command::Heartbeat(heartbeat)) => {
-                    let connection = Arc::clone(&connection);
+                    let connection = connection.clone();
+                    let heartbeat_processor = Arc::clone(&self.heartbeat_processor);
                     tokio::spawn(async move {
-                        if let Err(e) = HeartbeatProcessor::new(heartbeat, connection)
-                            .process()
+                        if let Err(e) = heartbeat_processor.process(heartbeat, connection)
                             .await
                         {
                             debug!("Failed to process datagram heartbeat: {}", e);
                         }
                     });
                 }
+
                 Ok(command) => {
                     debug!("Received unexpected command type via datagram: {}", command);
                 }
@@ -240,6 +230,7 @@ impl ConnectionProcessor for TuicConnectionProcessor {
         Ok(())
     }
 }
+
 impl TuicConnectionProcessor {
     /// Create a new TuicConnectionProcessor.
     ///
@@ -258,16 +249,28 @@ impl TuicConnectionProcessor {
     where
         I: IntoIterator<Item = (uuid::Uuid, String)>,
     {
-        let authentication_manager = Arc::new(TuicAuthenticationManager::new(user_entries));
+        //command processors
+        let authentication_manager = TuicAuthenticationManager::new(user_entries);
+        let authenticate_processor = Arc::new(AuthenticateProcessor::new(authentication_manager));
+
+        let connection_processor = Arc::new(ConnectProcessor::new());
+        let heartbeat_processor = Arc::new(HeartbeatProcessor::new());
+
         let udp_session_manager = UdpSessionManager::new(udp_session_timeout, udp_cleanup_interval);
+        let packet_processor = Arc::new(PacketProcessor::new(Arc::clone(&udp_session_manager)));
+        let dissociate_processor = Arc::new(DissociateProcess::new(Arc::clone(&udp_session_manager)));
 
         // apply optional limits
         udp_session_manager.set_max_sessions(max_sessions);
         udp_session_manager.set_max_reassembly_bytes_per_session(max_reassembly_bytes_per_session);
 
         Self {
-            authentication_manager,
             udp_session_manager,
+            authenticate_processor,
+            connect_processor: connection_processor,
+            dissociate_processor,
+            heartbeat_processor,
+            packet_processor,
         }
     }
 }

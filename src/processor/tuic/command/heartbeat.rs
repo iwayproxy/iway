@@ -1,34 +1,23 @@
 use anyhow::Result;
-use async_trait::async_trait;
 use tracing::debug;
 use quinn::Connection;
-use std::sync::Arc;
 
 use crate::protocol::tuic::command::heartbeat::Heartbeat;
 
-use super::Processor;
-
 pub struct HeartbeatProcessor {
-    heartbeat: Heartbeat,
-    connection: Arc<Connection>,
+    
 }
 
 impl HeartbeatProcessor {
-    pub fn new(heartbeat: Heartbeat, connection: Arc<Connection>) -> Self {
-        Self {
-            heartbeat,
-            connection,
-        }
+    pub fn new() -> Self {
+        Self {}
     }
-}
-
-#[async_trait]
-impl Processor for HeartbeatProcessor {
-    async fn process(&mut self) -> Result<()> {
+    
+    pub async fn process(&self, heartbeat: Heartbeat, connection: Connection) -> Result<()> {
         debug!(
             "Processing heartbeat : {:?} from {}",
-            self.heartbeat,
-            self.connection.remote_address()
+            heartbeat,
+            connection.remote_address()
         );
         Ok(())
     }

@@ -1,9 +1,12 @@
 [package]
 name = "iway"
-version = "1.1.5"
+version = "2.0.0"
 edition = "2024"
 
 [dependencies]
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+tikv-jemallocator = "0.6.1"
+
 async-trait = "0.1.89"
 bytes = "1.10.1"
 dashmap = { version = "6.1.0", features = ["serde"] }
@@ -32,12 +35,6 @@ tracing-appender = "0.2"
 zeroize = { version = "1.6", features = ["derive"] }
 # constant-time comparison to prevent timing attacks
 subtle = "2.5"
-
-[target.'cfg(unix)'.dependencies]
-tikv-jemallocator = "0.6.1"
-#tikv-jemalloc-ctl = { version = "0.6.1", features = ["stats"]}
-
-[target.'cfg(windows)'.dependencies]
 
 [profile.release]
 opt-level = 3

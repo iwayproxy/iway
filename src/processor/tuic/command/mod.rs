@@ -8,14 +8,6 @@ use std::sync::Arc;
 use tokio::sync::{Mutex, Notify};
 use tokio::time::{Duration, timeout};
 
-use anyhow::Result;
-use async_trait::async_trait;
-
-#[async_trait]
-pub trait Processor {
-    async fn process(&mut self) -> Result<()>;
-}
-
 #[derive(Clone, PartialEq, Debug)]
 pub enum NotifyState {
     Success,

@@ -7,7 +7,6 @@ use std::{
     time::Duration,
 };
 
-use async_trait::async_trait;
 use tracing::debug;
 use quinn::{RecvStream, SendStream};
 use tokio::{
@@ -18,63 +17,21 @@ use tokio_util::compat::TokioAsyncReadCompatExt;
 
 use crate::protocol::tuic::command::connect::Connect;
 
-use super::Processor;
-
-pub struct ConnectProcessor {
-    send: SendStream,
-    recv: RecvStream,
-    connect: Connect,
-}
+pub struct ConnectProcessor {}
 
 impl ConnectProcessor {
-    pub fn new(send: SendStream, recv: RecvStream, connect: Connect) -> Self {
-        Self {
-            send,
-            recv,
-            connect,
-        }
-    }
-}
-
-impl AsyncRead for ConnectProcessor {
-    fn poll_read(
-        self: Pin<&mut Self>,
-        cx: &mut TaskContext<'_>,
-        buf: &mut io::ReadBuf<'_>,
-    ) -> Poll<std::io::Result<()>> {
-        AsyncRead::poll_read(Pin::new(&mut self.get_mut().recv), cx, buf)
-    }
-}
-
-impl AsyncWrite for ConnectProcessor {
-    fn poll_write(
-        self: Pin<&mut Self>,
-        cx: &mut TaskContext<'_>,
-        buf: &[u8],
-    ) -> Poll<std::io::Result<usize>> {
-        AsyncWrite::poll_write(Pin::new(&mut self.get_mut().send), cx, buf)
+    pub fn new() -> Self {
+        Self {}
     }
 
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<std::io::Result<()>> {
-        AsyncWrite::poll_flush(Pin::new(&mut self.get_mut().send), cx)
-    }
-
-    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<std::io::Result<()>> {
-        AsyncWrite::poll_shutdown(Pin::new(&mut self.get_mut().send), cx)
-    }
-}
-
-#[async_trait]
-impl Processor for ConnectProcessor {
-    async fn process(&mut self) -> Result<()> {
-        let socket_addr = self
-            .connect
+    pub async fn process(&self, send: SendStream, recv: RecvStream, connect: Connect) -> Result<()> {
+        let socket_addr = connect
             .address()
             .to_socket_address()
             .await
             .context(format!(
                 "Failed to resolve address {}",
-                self.connect.address()
+                connect.address()
             ))?;
 
         let mut tcp_stream = match connect_with_keepalive(
@@ -92,13 +49,14 @@ impl Processor for ConnectProcessor {
             }
         };
 
-        let mut bidirectional_stream = self.compat();
+        let quinn_compat = QuinnCompat{send, recv};
+        let mut bidirectional_stream = quinn_compat.compat();
 
         let copy_result = io::copy_bidirectional_with_sizes(
             &mut bidirectional_stream.get_mut(),
             &mut tcp_stream,
-            8 * 1024 * 1024,
-            8 * 1024 * 1024,
+            1024 * 1024,
+            1024 * 1024,
         )
         .await;
 
@@ -113,7 +71,11 @@ impl Processor for ConnectProcessor {
                 // surface as debug but attach context when returning
                 debug!("Error during TCP communication with {}: {}", socket_addr, e);
             }
-        }
+        };
+
+        let mut buf = Vec::new();
+        let _ = tcp_stream.read_to_end(&mut buf).await;
+        let _ = tcp_stream.shutdown().await;
 
         if let Err(e) = tcp_stream.flush().await {
             debug!("tcp_stream.flush() error: {}", e);
@@ -122,11 +84,6 @@ impl Processor for ConnectProcessor {
         if let Err(e) = tcp_stream.shutdown().await {
             debug!("tcp_stream.shutdown() error: {}", e);
         }
-
-        let mut buf = Vec::new();
-        let _ = tcp_stream.read_to_end(&mut buf).await;
-
-        drop(tcp_stream);
 
         Ok(())
     }
@@ -165,4 +122,38 @@ pub async fn connect_with_keepalive(
     };
 
     Ok(stream)
+}
+
+
+struct QuinnCompat {
+    recv: quinn::RecvStream,
+    send: quinn::SendStream,
+}
+
+impl AsyncRead for QuinnCompat {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut TaskContext<'_>,
+        buf: &mut io::ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        AsyncRead::poll_read(Pin::new(&mut self.get_mut().recv), cx, buf)
+    }
+}
+
+impl AsyncWrite for QuinnCompat {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut TaskContext<'_>,
+        buf: &[u8],
+    ) -> Poll<std::io::Result<usize>> {
+        AsyncWrite::poll_write(Pin::new(&mut self.get_mut().send), cx, buf)
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<std::io::Result<()>> {
+        AsyncWrite::poll_flush(Pin::new(&mut self.get_mut().send), cx)
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<std::io::Result<()>> {
+        AsyncWrite::poll_shutdown(Pin::new(&mut self.get_mut().send), cx)
+    }
 }
