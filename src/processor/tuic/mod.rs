@@ -24,7 +24,6 @@ use command::packet::PacketProcessor;
 
 // #[derive(Debug)]
 pub struct TuicConnectionProcessor {
-    udp_session_manager: Arc<UdpSessionManager>,
     authenticate_processor: Arc<AuthenticateProcessor>,
     connect_processor: Arc<ConnectProcessor>,
     dissociate_processor: Arc<DissociateProcess>,
@@ -265,7 +264,6 @@ impl TuicConnectionProcessor {
         udp_session_manager.set_max_reassembly_bytes_per_session(max_reassembly_bytes_per_session);
 
         Self {
-            udp_session_manager,
             authenticate_processor,
             connect_processor: connection_processor,
             dissociate_processor,
