@@ -1,6 +1,6 @@
-use tracing::debug;
 use quinn::Connection;
 use std::sync::Arc;
+use tracing::debug;
 
 use anyhow::Result;
 
@@ -14,9 +14,7 @@ pub struct DissociateProcess {
 }
 
 impl DissociateProcess {
-    pub fn new(
-        udp_session_manager: Arc<UdpSessionManager>,
-    ) -> Self {
+    pub fn new(udp_session_manager: Arc<UdpSessionManager>) -> Self {
         Self {
             udp_session_manager,
         }

@@ -13,8 +13,8 @@ use command::connect::ConnectProcessor;
 use command::heartbeat::HeartbeatProcessor;
 use command::{NotifyState, OneShotNotifier};
 
-use tracing::{debug, error, info};
 use quinn::{Connection, VarInt};
+use tracing::{debug, error, info};
 
 use crate::authenticate::tuic::TuicAuthenticationManager;
 use crate::processor::ConnectionProcessor;
@@ -62,7 +62,10 @@ impl ConnectionProcessor for TuicConnectionProcessor {
 
             match command {
                 Command::Authenticate(authenticate) => {
-                    match self.authenticate_processor.verify(authenticate, connection.clone()) {
+                    match self
+                        .authenticate_processor
+                        .verify(authenticate, connection.clone())
+                    {
                         Ok(_) => {
                             debug!(
                                 "Successful to authenticate client, address: {}",
@@ -88,9 +91,10 @@ impl ConnectionProcessor for TuicConnectionProcessor {
                                 let connection = connection.clone();
 
                                 tokio::spawn(async move {
-                                    match packet_processor.process(connection, packet)
-                                    .await
-                                    .context("Failed to handle packet from uni-stream.")
+                                    match packet_processor
+                                        .process(connection, packet)
+                                        .await
+                                        .context("Failed to handle packet from uni-stream.")
                                     {
                                         Ok(_) => {
                                             debug!("Success to process packet from uni-stream")
@@ -121,8 +125,8 @@ impl ConnectionProcessor for TuicConnectionProcessor {
                                 let connection = connection.clone();
                                 let dissociate_processor = Arc::clone(&self.dissociate_processor);
                                 tokio::spawn(async move {
-                                    let _ = dissociate_processor.process(connection, dissociate)
-                                    .await;
+                                    let _ =
+                                        dissociate_processor.process(connection, dissociate).await;
                                 });
                             }
                             NotifyState::Failure => {
@@ -164,9 +168,7 @@ impl ConnectionProcessor for TuicConnectionProcessor {
                 match command {
                     Command::Connect(connect) => {
                         tokio::spawn(async move {
-                            if let Err(e) =
-                                connect_processor.process(send, recv, connect).await
-                            {
+                            if let Err(e) = connect_processor.process(send, recv, connect).await {
                                 debug!("Failed to process Connect command: {}", e);
                             }
                         });
@@ -197,9 +199,7 @@ impl ConnectionProcessor for TuicConnectionProcessor {
                     let connection = connection.clone();
                     let packet_processor = Arc::clone(&self.packet_processor);
                     tokio::spawn(async move {
-                        if let Err(e) =
-                            packet_processor.process(connection, packet).await
-                        {
+                        if let Err(e) = packet_processor.process(connection, packet).await {
                             debug!("Failed to process datagram packet: {}", e);
                         }
                     });
@@ -209,9 +209,7 @@ impl ConnectionProcessor for TuicConnectionProcessor {
                     let connection = connection.clone();
                     let heartbeat_processor = Arc::clone(&self.heartbeat_processor);
                     tokio::spawn(async move {
-                        if let Err(e) = heartbeat_processor.process(heartbeat, connection)
-                            .await
-                        {
+                        if let Err(e) = heartbeat_processor.process(heartbeat, connection).await {
                             debug!("Failed to process datagram heartbeat: {}", e);
                         }
                     });
@@ -257,7 +255,8 @@ impl TuicConnectionProcessor {
 
         let udp_session_manager = UdpSessionManager::new(udp_session_timeout, udp_cleanup_interval);
         let packet_processor = Arc::new(PacketProcessor::new(Arc::clone(&udp_session_manager)));
-        let dissociate_processor = Arc::new(DissociateProcess::new(Arc::clone(&udp_session_manager)));
+        let dissociate_processor =
+            Arc::new(DissociateProcess::new(Arc::clone(&udp_session_manager)));
 
         // apply optional limits
         udp_session_manager.set_max_sessions(max_sessions);

@@ -7,13 +7,13 @@ use std::{
     time::Duration,
 };
 
-use tracing::debug;
 use quinn::{RecvStream, SendStream};
 use tokio::{
     io::{self, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     net::TcpStream,
 };
 use tokio_util::compat::TokioAsyncReadCompatExt;
+use tracing::debug;
 
 use crate::protocol::tuic::command::connect::Connect;
 
@@ -24,15 +24,17 @@ impl ConnectProcessor {
         Self {}
     }
 
-    pub async fn process(&self, send: SendStream, recv: RecvStream, connect: Connect) -> Result<()> {
+    pub async fn process(
+        &self,
+        send: SendStream,
+        recv: RecvStream,
+        connect: Connect,
+    ) -> Result<()> {
         let socket_addr = connect
             .address()
             .to_socket_address()
             .await
-            .context(format!(
-                "Failed to resolve address {}",
-                connect.address()
-            ))?;
+            .context(format!("Failed to resolve address {}", connect.address()))?;
 
         let mut tcp_stream = match connect_with_keepalive(
             socket_addr,
@@ -49,7 +51,7 @@ impl ConnectProcessor {
             }
         };
 
-        let quinn_compat = QuinnCompat{send, recv};
+        let quinn_compat = QuinnCompat { send, recv };
         let mut bidirectional_stream = quinn_compat.compat();
 
         let copy_result = io::copy_bidirectional_with_sizes(
@@ -123,7 +125,6 @@ pub async fn connect_with_keepalive(
 
     Ok(stream)
 }
-
 
 struct QuinnCompat {
     recv: quinn::RecvStream,

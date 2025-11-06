@@ -7,11 +7,11 @@ use std::{
 
 use anyhow::{Ok, Result, bail};
 use bytes::{BufMut, Bytes, BytesMut};
-use tracing::debug;
 use tokio::{
     io::{AsyncRead, AsyncReadExt},
     net,
 };
+use tracing::debug;
 
 use super::address_type::AddressType;
 

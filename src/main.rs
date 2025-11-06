@@ -9,9 +9,9 @@ use anyhow::Result;
 
 use tokio::sync::watch;
 
-use tracing::{error, info};
 use server::ServerManager;
 use std::{cmp::max, env, time::Instant};
+use tracing::{error, info};
 
 use tracing_appender::rolling;
 use tracing_subscriber::{Layer, fmt, layer::SubscriberExt, util::SubscriberInitExt};

@@ -1,8 +1,5 @@
-use std::{
-    fmt::Debug,
-    sync::Arc,
-};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
+use std::{fmt::Debug, sync::Arc};
 
 use dashmap::DashMap;
 use uuid::Uuid;
@@ -33,5 +30,4 @@ impl TuicAuthenticationManager {
             None => Err(anyhow!("Illegal UUID {} trys to access the server.", uuid)),
         }
     }
-
 }
