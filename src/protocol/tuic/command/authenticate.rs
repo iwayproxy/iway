@@ -63,10 +63,10 @@ impl Authenticate {
     /// Securely verify if the provided token matches this instance's token.
     /// This method should be used instead of accessing the raw token bytes.
     /// Uses constant-time comparison to prevent timing attacks.
-    pub fn verify_token(&self, expected: &[u8; TOKEN_LEN]) -> bool {
+    pub fn verify_token(&self, expected: &[u8; TOKEN_LEN]) -> Result<bool> {
         use subtle::ConstantTimeEq;
         // ct_eq returns Choice(1) for equality, Choice(0) for inequality
-        self.token().ct_eq(expected).into()
+        Ok(self.token().ct_eq(expected).into())
     }
 }
 

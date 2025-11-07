@@ -1,7 +1,6 @@
-use anyhow::Result;
+use anyhow::{Result, bail};
 
 use quinn::Connection;
-use tracing::error;
 
 use crate::{
     authenticate::tuic::TuicAuthenticationManager,
@@ -22,22 +21,36 @@ impl AuthenticateProcessor {
     pub fn verify(&self, authenticate: Authenticate, connection: Connection) -> Result<bool> {
         let password = match self.authenticate_manager.password(authenticate.uuid()) {
             Ok(value) => value,
-            Err(_) => todo!(),
+            Err(_) => {
+                bail!(
+                    "Failed to authencate client: {}, uuid: {} is not existed:",
+                    connection.remote_address(),
+                    authenticate.uuid()
+                );
+            }
         };
 
         let mut buff: [u8; 32] = [0; 32];
         if let Err(e) =
             connection.export_keying_material(&mut buff, authenticate.uuid().as_bytes(), &password)
         {
-            error!(
+            bail!(
                 "Failed to export keying material for uuid={} from={} err={:?}",
                 authenticate.uuid(),
                 connection.remote_address(),
                 e
             );
-            return Err(anyhow::anyhow!(""));
         }
 
-        Ok(authenticate.verify_token(&buff))
+        match authenticate.verify_token(&buff) {
+            Ok(true) => Ok(true),
+            _ => {
+                bail!(
+                    "Failed to verify client token! client: {}, uuid: {}",
+                    connection.remote_address(),
+                    authenticate.uuid()
+                )
+            }
+        }
     }
 }
