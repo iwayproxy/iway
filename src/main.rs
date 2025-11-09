@@ -10,7 +10,7 @@ static GLOBAL: Jemalloc = Jemalloc;
 
 #[cfg(target_env = "msvc")]
 #[global_allocator]
-static GLOBAL: Mimalloc = Mimalloc;
+static GLOBAL: MiMalloc = MiMalloc;
 
 use anyhow::Result;
 
