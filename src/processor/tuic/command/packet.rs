@@ -27,17 +27,17 @@ impl PacketProcessor {
     }
 
     pub async fn process(&self, connection: Connection, packet: Packet) -> Result<()> {
-        let dest_addr = packet.address.clone();
         let fragment = UdpFragment::from_packet(&packet);
 
         let udp_session_manager = self.udp_session_manager.clone();
         let connection = connection.clone();
-        let packet = packet.clone();
 
         let fut = async move {
             if let Some(reassembled) =
                 udp_session_manager.receive_fragment(fragment, connection.remote_address())
             {
+                let dest_addr = packet.address;
+
                 let response = send_and_receive(dest_addr.clone(), &reassembled)
                     .await
                     .context("Failed to send and receive UDP packet")?;

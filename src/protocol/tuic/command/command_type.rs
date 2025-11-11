@@ -4,7 +4,7 @@ use std::{convert::TryFrom, fmt};
 use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncReadExt};
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy)]
+#[derive(Debug)]
 #[repr(u8)]
 pub enum CommandType {
     Authenticate = 0x00,
@@ -29,7 +29,14 @@ impl CommandType {
     }
 
     pub fn write_to<W: BufMut>(&self, w: &mut W) {
-        w.put_u8(*self as u8);
+        let v = match self {
+            CommandType::Authenticate => 0x00,
+            CommandType::Connect => 0x01,
+            CommandType::Packet => 0x02,
+            CommandType::Dissociate => 0x03,
+            CommandType::Heartbeat => 0x04,
+        };
+        w.put_u8(v);
     }
 
     pub fn as_str(&self) -> &'static str {

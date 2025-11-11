@@ -6,12 +6,16 @@ use tokio::io::AsyncRead;
 
 use super::{command::command_type::CommandType, version::Version};
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Header {
-    pub version: Version,
-    pub command_type: CommandType,
+    version: Version,
+    command_type: CommandType,
 }
 impl Header {
+    pub fn new(command_type: CommandType) -> Self {
+        Self { version: Version::V5, command_type }
+    }
+    
     pub fn command_type(&self) -> &CommandType {
         &self.command_type
     }

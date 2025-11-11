@@ -3,14 +3,14 @@ use anyhow::{Context, Result};
 use bytes::{BufMut, Bytes, BytesMut};
 use std::fmt::Display;
 
-use crate::protocol::tuic::{address::Address, header::Header, version::Version};
+use crate::protocol::tuic::{address::Address, header::Header};
 use tokio::io::{AsyncRead, AsyncReadExt};
 
 use super::command_type::CommandType;
 
 const MAX_PAYLOAD_PER_PACKET: usize = 1200;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Packet {
     pub header: Header,
     pub assoc_id: u16,
@@ -35,10 +35,7 @@ impl Packet {
 
         for (frag_id, chunk) in full_payload.chunks(MAX_PAYLOAD_PER_PACKET).enumerate() {
             packets.push(Packet {
-                header: Header {
-                    version: Version::V5,
-                    command_type: CommandType::Packet,
-                },
+                header: Header::new(CommandType::Packet),
                 assoc_id,
                 pkt_id,
                 frag_total,

@@ -21,11 +21,11 @@ pub enum UdpError {
 
 #[derive(Debug, Clone)]
 pub struct UdpFragment {
-    pub assoc_id: u16,
-    pub pkt_id: u16,
-    pub frag_id: u8,
-    pub frag_total: u8,
-    pub payload: Bytes,
+    assoc_id: u16,
+    pkt_id: u16,
+    frag_id: u8,
+    frag_total: u8,
+    payload: Bytes,
 }
 
 impl UdpFragment {

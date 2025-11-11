@@ -67,7 +67,7 @@ impl Address {
         socket_addr
     }
 
-    async fn resolve(&self, domain: &String, port: &Port) -> Result<SocketAddr> {
+    async fn resolve(&self, domain: &str, port: &Port) -> Result<SocketAddr> {
         let mut addr_itr = net::lookup_host(format!("{}:{}", domain, port)).await?;
         let Some(addr) = addr_itr.next() else {
             bail!("Failed to resolve address: {}", domain);
@@ -93,7 +93,7 @@ impl Address {
                 read.read_exact(&mut domain_bytes).await?;
                 cache.put_slice(&domain_bytes);
 
-                let address = str::from_utf8(&domain_bytes)?.to_string();
+                let address = String::from_utf8(domain_bytes)?;
 
                 let port = read.read_u16().await?;
                 cache.put_u16(port);

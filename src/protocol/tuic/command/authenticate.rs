@@ -11,7 +11,7 @@ use crate::protocol::tuic::header::Header;
 const UUID_LEN: usize = 16;
 const TOKEN_LEN: usize = 32;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Authenticate {
     header: Header,
     uuid: Uuid,
@@ -20,7 +20,6 @@ pub struct Authenticate {
 
 impl Drop for Authenticate {
     fn drop(&mut self) {
-        // zeroize the sensitive token on drop
         self.token.zeroize();
     }
 }
@@ -55,18 +54,9 @@ impl Authenticate {
         self.uuid
     }
 
-    // private, only used internally
-    fn token(&self) -> &[u8; 32] {
-        &self.token
-    }
-
-    /// Securely verify if the provided token matches this instance's token.
-    /// This method should be used instead of accessing the raw token bytes.
-    /// Uses constant-time comparison to prevent timing attacks.
     pub fn verify_token(&self, expected: &[u8; TOKEN_LEN]) -> Result<bool> {
         use subtle::ConstantTimeEq;
-        // ct_eq returns Choice(1) for equality, Choice(0) for inequality
-        Ok(self.token().ct_eq(expected).into())
+        Ok(self.token.ct_eq(expected).into())
     }
 }
 

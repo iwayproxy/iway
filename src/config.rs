@@ -3,31 +3,41 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct UserConfig {
-    pub uuid: String,
-    pub password: String,
+    uuid: String,
+    password: String,
+}
+
+impl UserConfig {
+    pub fn uuid(&self) -> &str {
+        &self.uuid
+    }
+    
+    pub fn password(&self) -> &str {
+        &self.password
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
-    pub server_addr: String,
+    server_addr: String,
 
-    pub udp_session_timeout: u64,
+    udp_session_timeout: u64,
 
-    pub udp_socket_timeout: u64,
+    udp_socket_timeout: u64,
 
-    pub cert_path: String,
+    cert_path: String,
 
-    pub key_path: String,
+    key_path: String,
 
     // Optional limits for UDP session management
     // If set to None, the defaults in code apply (unbounded or conservative defaults)
-    pub udp_max_sessions: Option<usize>,
+    udp_max_sessions: Option<usize>,
 
-    pub udp_max_reassembly_bytes_per_session: Option<usize>,
+    udp_max_reassembly_bytes_per_session: Option<usize>,
 
-    pub users: Vec<UserConfig>,
+    users: Vec<UserConfig>,
 }
 
 impl Default for Config {
@@ -58,5 +68,33 @@ impl Config {
         fs::write(path, content).context("Failed to write config file")?;
 
         Ok(())
+    }
+    
+    pub fn server_addr(&self) -> &str {
+        &self.server_addr
+    }
+    
+    pub fn udp_session_timeout(&self) -> u64 {
+        self.udp_session_timeout
+    }
+    
+    pub fn cert_path(&self) -> &str {
+        &self.cert_path
+    }
+    
+    pub fn key_path(&self) -> &str {
+        &self.key_path
+    }
+    
+    pub fn udp_max_sessions(&self) -> Option<usize> {
+        self.udp_max_sessions
+    }
+    
+    pub fn udp_max_reassembly_bytes_per_session(&self) -> Option<usize> {
+        self.udp_max_reassembly_bytes_per_session
+    }
+    
+    pub fn users(&self) -> &[UserConfig] {
+        &self.users
     }
 }
