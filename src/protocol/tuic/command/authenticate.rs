@@ -50,14 +50,15 @@ impl Authenticate {
         })
     }
 
-    pub fn uuid(&self) -> Uuid {
-        self.uuid
+    pub fn uuid(&self) -> &Uuid {
+        &self.uuid
     }
 
     pub fn verify_token(&self, expected: &[u8; TOKEN_LEN]) -> Result<bool> {
         use subtle::ConstantTimeEq;
         Ok(self.token.ct_eq(expected).into())
     }
+    
 }
 
 impl fmt::Display for Authenticate {

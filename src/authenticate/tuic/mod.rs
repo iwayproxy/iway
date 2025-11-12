@@ -24,8 +24,8 @@ impl TuicAuthenticationManager {
         TuicAuthenticationManager { users }
     }
 
-    pub fn password(&self, uuid: Uuid) -> Result<Arc<[u8]>> {
-        match self.users.get(&uuid) {
+    pub fn password(&self, uuid: &Uuid) -> Result<Arc<[u8]>> {
+        match self.users.get(uuid) {
             Some(value) => Ok(value.clone()),
             None => Err(anyhow!("Illegal UUID {} trys to access the server.", uuid)),
         }

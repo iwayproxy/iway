@@ -25,7 +25,7 @@ impl AuthenticateProcessor {
                 bail!(
                     "Failed to authencate client: {}, uuid: {} is not existed:",
                     connection.remote_address(),
-                    authenticate.uuid()
+                    &authenticate.uuid()
                 );
             }
         };
@@ -36,7 +36,7 @@ impl AuthenticateProcessor {
         {
             bail!(
                 "Failed to export keying material for uuid={} from={} err={:?}",
-                authenticate.uuid(),
+                &authenticate.uuid(),
                 connection.remote_address(),
                 e
             );
@@ -48,7 +48,7 @@ impl AuthenticateProcessor {
                 bail!(
                     "Failed to verify client token! client: {}, uuid: {}",
                     connection.remote_address(),
-                    authenticate.uuid()
+                    &authenticate.uuid()
                 )
             }
         }

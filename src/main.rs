@@ -92,7 +92,7 @@ fn main() {
 }
 
 // #[tokio::main(flavor = "multi_thread", worker_threads = 16)]
-async fn async_main() -> Result<()> {
+async fn async_main() -> Result<(), String> {
     let start_time = Instant::now();
 
     let config_path = env::args()
@@ -117,7 +117,7 @@ async fn async_main() -> Result<()> {
         ),
         Err(e) => {
             error!("Failed to initialize servers: {}", e);
-            std::process::exit(1);
+            return Err("Failed to initialize servers!".to_string());
         }
     }
 
@@ -128,7 +128,7 @@ async fn async_main() -> Result<()> {
         ),
         Err(e) => {
             error!("Failed to start servers: {}", e);
-            std::process::exit(1);
+            return Err("Failed to start servers!".to_string());
         }
     }
 
