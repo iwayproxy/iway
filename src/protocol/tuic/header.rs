@@ -13,9 +13,12 @@ pub struct Header {
 }
 impl Header {
     pub fn new(command_type: CommandType) -> Self {
-        Self { version: Version::V5, command_type }
+        Self {
+            version: Version::V5,
+            command_type,
+        }
     }
-    
+
     pub fn command_type(&self) -> &CommandType {
         &self.command_type
     }

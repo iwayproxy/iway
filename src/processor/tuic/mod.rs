@@ -9,9 +9,9 @@ use std::time::Duration;
 use udp_session_manager::UdpSessionManager;
 
 use async_trait::async_trait;
+use command::OneShotNotifier;
 use command::connect::ConnectProcessor;
 use command::heartbeat::HeartbeatProcessor;
-use command::{OneShotNotifier};
 
 use quinn::{Connection, VarInt};
 use tracing::{debug, error, info};

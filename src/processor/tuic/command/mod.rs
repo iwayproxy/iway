@@ -16,8 +16,8 @@ pub struct OneShotNotifier {
 impl OneShotNotifier {
     pub fn new() -> Self {
         let (tx, _rx) = watch::channel(None);
-        
-        Self{ tx, _rx }
+
+        Self { tx, _rx }
     }
 
     pub fn notify(&self, v: bool) {
@@ -64,9 +64,9 @@ impl OneShotNotifier {
         match timeout(dur, fut).await {
             Ok(r) => r,
             Err(e) => {
-                error!{"This should not happen, there must be something wrong! error: {e}"}
+                error! {"This should not happen, there must be something wrong! error: {e}"}
                 None
-            },
+            }
         }
     }
 }

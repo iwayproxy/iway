@@ -58,7 +58,6 @@ impl Authenticate {
         use subtle::ConstantTimeEq;
         Ok(self.token.ct_eq(expected).into())
     }
-    
 }
 
 impl fmt::Display for Authenticate {

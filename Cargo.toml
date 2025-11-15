@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 async-trait = "0.1.89"
-bytes = "1.10.1"
+bytes = "1.11.0"
 dashmap = { version = "6.1.0", features = ["serde"] }
 thiserror = "2.0.17"
 anyhow = "1.0.100"

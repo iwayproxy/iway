@@ -13,7 +13,7 @@ impl UserConfig {
     pub fn uuid(&self) -> &str {
         &self.uuid
     }
-    
+
     pub fn password(&self) -> &str {
         &self.password
     }
@@ -69,31 +69,31 @@ impl Config {
 
         Ok(())
     }
-    
+
     pub fn server_addr(&self) -> &str {
         &self.server_addr
     }
-    
+
     pub fn udp_session_timeout(&self) -> u64 {
         self.udp_session_timeout
     }
-    
+
     pub fn cert_path(&self) -> &str {
         &self.cert_path
     }
-    
+
     pub fn key_path(&self) -> &str {
         &self.key_path
     }
-    
+
     pub fn udp_max_sessions(&self) -> Option<usize> {
         self.udp_max_sessions
     }
-    
+
     pub fn udp_max_reassembly_bytes_per_session(&self) -> Option<usize> {
         self.udp_max_reassembly_bytes_per_session
     }
-    
+
     pub fn users(&self) -> &[UserConfig] {
         &self.users
     }
