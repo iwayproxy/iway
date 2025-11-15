@@ -4,62 +4,69 @@ pub mod dissociate;
 pub mod heartbeat;
 pub mod packet;
 
-use std::sync::Arc;
-use tokio::sync::{Mutex, Notify};
+use tokio::sync::watch;
 use tokio::time::{Duration, timeout};
+use tracing::error;
 
-#[derive(Clone, PartialEq, Debug)]
-pub enum NotifyState {
-    Success,
-    Failure,
-}
-
-#[derive(Clone)]
 pub struct OneShotNotifier {
-    state: Arc<Mutex<Option<NotifyState>>>,
-    notify: Arc<Notify>,
+    tx: watch::Sender<Option<bool>>,
+    _rx: watch::Receiver<Option<bool>>,
 }
 
 impl OneShotNotifier {
     pub fn new() -> Self {
-        Self {
-            state: Arc::new(Mutex::new(None)),
-            notify: Arc::new(Notify::new()),
+        let (tx, _rx) = watch::channel(None);
+        
+        Self{ tx, _rx }
+    }
+
+    pub fn notify(&self, v: bool) {
+        if self.tx.borrow().is_some() {
+            return;
+        }
+
+        if let Err(e) = self.tx.send(Some(v)) {
+            error!("Failed to send notity, error: {}", e);
         }
     }
 
-    pub async fn notify(&self, value: NotifyState) {
-        let mut guard = self.state.lock().await;
-        if guard.is_none() {
-            *guard = Some(value);
-            self.notify.notify_waiters();
-        }
-    }
-
-    pub async fn wait(&self) -> Option<NotifyState> {
-        // 使用默认的10秒超时
+    pub async fn wait(&self) -> Option<bool> {
+        // default timeout: 3 seconds
         self.wait_timeout(Duration::from_secs(3)).await
     }
 
-    /// Wait for a notification but return None on timeout.
-    ///
-    /// Returns `Some(NotifyState)` if a notification was received before the timeout,
-    /// or `None` if the timeout elapsed.
-    pub async fn wait_timeout(&self, dur: Duration) -> Option<NotifyState> {
-        match timeout(dur, async {
+    pub async fn wait_timeout(&self, dur: Duration) -> Option<bool> {
+        let mut rx = self.tx.subscribe();
+
+        // fast path: value already set
+        if let Some(v) = *rx.borrow() {
+            return Some(v);
+        }
+
+        // Run the waiting loop inside a single timeout so `dur` is the total
+        // maximum time we wait. The async block returns Some(v) if a value
+        // appears, or the final borrowed value (possibly None) if the sender
+        // is dropped.
+        let fut = async {
             loop {
-                let guard = self.state.lock().await;
-                if let Some(val) = &*guard {
-                    return Some(val.clone());
+                // fast path: value already set
+                if let Some(v) = *rx.borrow() {
+                    return Some(v);
                 }
-                drop(guard);
-                self.notify.notified().await;
+
+                match rx.changed().await {
+                    Ok(()) => continue,
+                    Err(_) => return *rx.borrow(), // sender dropped
+                }
             }
-        })
-        .await
-        {
-            Ok(result) => result,
-            Err(_) => None,
+        };
+
+        match timeout(dur, fut).await {
+            Ok(r) => r,
+            Err(e) => {
+                error!{"This should not happen, there must be something wrong! error: {e}"}
+                None
+            },
         }
     }
 }

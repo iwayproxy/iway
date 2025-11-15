@@ -11,7 +11,7 @@ use udp_session_manager::UdpSessionManager;
 use async_trait::async_trait;
 use command::connect::ConnectProcessor;
 use command::heartbeat::HeartbeatProcessor;
-use command::{NotifyState, OneShotNotifier};
+use command::{OneShotNotifier};
 
 use quinn::{Connection, VarInt};
 use tracing::{debug, error, info};
@@ -71,11 +71,11 @@ impl ConnectionProcessor for TuicConnectionProcessor {
                                 "Successful to authenticate client, address: {}",
                                 connection.remote_address()
                             );
-                            notifier.notify(NotifyState::Success).await;
+                            notifier.notify(true);
                         }
                         Err(e) => {
                             info!("Failed to authenticate: {}", e);
-                            notifier.notify(NotifyState::Failure).await;
+                            notifier.notify(false);
                             continue;
                         }
                     }
@@ -85,7 +85,7 @@ impl ConnectionProcessor for TuicConnectionProcessor {
                     let rx = notifier.clone();
                     if let Some(state) = rx.wait().await {
                         match state {
-                            NotifyState::Success => {
+                            true => {
                                 debug!("Received packet from {}", connection.remote_address());
                                 let packet_processor = Arc::clone(&self.packet_processor);
                                 let connection = connection.clone();
@@ -105,7 +105,7 @@ impl ConnectionProcessor for TuicConnectionProcessor {
                                     }
                                 });
                             }
-                            NotifyState::Failure => {
+                            false => {
                                 debug!("Do authentication failed, client: {}", remote);
                                 continue;
                             }
@@ -117,7 +117,7 @@ impl ConnectionProcessor for TuicConnectionProcessor {
                     let rx = notifier.clone();
                     if let Some(state) = rx.wait().await {
                         match state {
-                            NotifyState::Success => {
+                            true => {
                                 debug!(
                                     "Received dissociate from {} dissociate:{}",
                                     remote, dissociate
@@ -129,7 +129,7 @@ impl ConnectionProcessor for TuicConnectionProcessor {
                                         dissociate_processor.process(connection, dissociate).await;
                                 });
                             }
-                            NotifyState::Failure => {
+                            false => {
                                 debug!("Do authentication failed, client: {}", remote);
                                 continue;
                             }

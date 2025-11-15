@@ -57,8 +57,8 @@ impl ConnectProcessor {
         let copy_result = io::copy_bidirectional_with_sizes(
             &mut bidirectional_stream.get_mut(),
             &mut tcp_stream,
-            2 * 1024 * 1024,
-            2 * 1024 * 1024,
+            8 * 1024 * 1024,
+            8 * 1024 * 1024,
         )
         .await;
 

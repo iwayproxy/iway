@@ -7,7 +7,7 @@ use std::{io::Error, net::SocketAddr, path::Path, time::Instant};
 
 use crate::processor::ConnectionProcessor;
 use crate::processor::tuic::TuicConnectionProcessor;
-use crate::processor::tuic::command::{NotifyState, OneShotNotifier};
+use crate::processor::tuic::command::OneShotNotifier;
 
 use super::{Server, ServerStatus};
 
@@ -326,12 +326,12 @@ impl Server for TuicServer {
                                             let t_bid = tokio::spawn(async move {
                                                 if let Some(state) = rx.wait().await {
                                                     match state {
-                                                        NotifyState::Success => {
+                                                        true => {
                                                             let _ = bidirectional_processor
                                                                 .process_bidirectional(bidirection_conn)
                                                                 .await;
                                                         }
-                                                        NotifyState::Failure => {
+                                                        false => {
                                                             debug!("Do authentication failed, client: {}", remote);
                                                             return;
                                                         }
@@ -345,12 +345,12 @@ impl Server for TuicServer {
                                             let t_dat = tokio::spawn(async move {
                                                 if let Some(state) = rx.wait().await {
                                                     match state {
-                                                        NotifyState::Success => {
+                                                        true => {
                                                             let _ = datagram_processor
                                                                 .process_datagram(datagram_conn)
                                                                 .await;
                                                         }
-                                                        NotifyState::Failure => {
+                                                        false => {
                                                             debug!("Do authentication failed, client: {}", remote);
                                                             return;
                                                         }
