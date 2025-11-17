@@ -6,7 +6,7 @@ use std::fmt::Display;
 use crate::protocol::tuic::{address::Address, header::Header};
 use tokio::io::{AsyncRead, AsyncReadExt};
 
-use super::command_type::CommandType;
+use super::CommandType;
 
 const MAX_PAYLOAD_PER_PACKET: usize = 1200;
 

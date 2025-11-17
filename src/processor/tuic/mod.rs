@@ -248,18 +248,23 @@ impl TuicConnectionProcessor {
     {
         //command processors
         let authentication_manager = TuicAuthenticationManager::new(user_entries);
+
         let authenticate_processor = Arc::new(AuthenticateProcessor::new(authentication_manager));
 
         let connection_processor = Arc::new(ConnectProcessor::new());
+
         let heartbeat_processor = Arc::new(HeartbeatProcessor::new());
 
         let udp_session_manager = UdpSessionManager::new(udp_session_timeout, udp_cleanup_interval);
+
         let packet_processor = Arc::new(PacketProcessor::new(Arc::clone(&udp_session_manager)));
+
         let dissociate_processor =
             Arc::new(DissociateProcess::new(Arc::clone(&udp_session_manager)));
 
         // apply optional limits
         udp_session_manager.set_max_sessions(max_sessions);
+
         udp_session_manager.set_max_reassembly_bytes_per_session(max_reassembly_bytes_per_session);
 
         Self {

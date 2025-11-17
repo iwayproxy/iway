@@ -5,8 +5,8 @@ use tokio::io::AsyncRead;
 use crate::protocol::tuic::header::Header;
 
 use super::{
-    authenticate::Authenticate, command_type::CommandType, connect::Connect,
-    dissociate::Dissociate, heartbeat::Heartbeat, packet::Packet,
+    CommandType, authenticate::Authenticate, connect::Connect, dissociate::Dissociate,
+    heartbeat::Heartbeat, packet::Packet,
 };
 
 #[derive(Debug)]

@@ -4,7 +4,7 @@ use std::fmt;
 use bytes::BufMut;
 use tokio::io::AsyncRead;
 
-use super::{command::command_type::CommandType, version::Version};
+use super::{command::CommandType, version::Version};
 
 #[derive(Debug)]
 pub struct Header {
