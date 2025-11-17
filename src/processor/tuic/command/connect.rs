@@ -82,8 +82,6 @@ impl ConnectProcessor {
             tcp_stream.peer_addr()
         );
 
-        let _ = tcp_stream.shutdown().await;
-
         if let Err(e) = tcp_stream.flush().await {
             debug!("tcp_stream.flush() error: {}", e);
         }
