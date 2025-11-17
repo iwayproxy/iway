@@ -3,7 +3,7 @@ use std::io::{self, BufReader, ErrorKind};
 use std::path::PathBuf;
 use std::sync::{Arc, LazyLock};
 use std::time::Duration;
-use std::{io::Error, net::SocketAddr, path::Path, time::Instant};
+use std::{net::SocketAddr, path::Path, time::Instant};
 
 use crate::processor::ConnectionProcessor;
 use crate::processor::tuic::TuicConnectionProcessor;
@@ -11,6 +11,7 @@ use crate::processor::tuic::command::OneShotNotifier;
 
 use super::{Server, ServerStatus};
 
+use anyhow::{Context, Error, Result, anyhow, bail};
 use async_trait::async_trait;
 use quinn::congestion::BbrConfig;
 use quinn::crypto::rustls::QuicServerConfig;
@@ -24,35 +25,24 @@ use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::sync::watch::Receiver;
 use tracing::{debug, info};
 
-fn load_certs(path: &Path) -> io::Result<Vec<CertificateDer<'static>>> {
-    let file = File::open(path).map_err(|e| {
-        io::Error::new(
-            ErrorKind::Other,
-            format!("Failed to open certificate file: {}", e),
-        )
-    })?;
+fn load_certs(path: &Path) -> Result<Vec<CertificateDer<'static>>> {
+    let file =
+        File::open(path).with_context(|| format!("Failed to open certificate file: {:?}", path))?;
 
-    let certs: io::Result<Vec<_>> = certs(&mut BufReader::new(file)).collect();
-    let certs = certs.map_err(|e| {
-        io::Error::new(
-            ErrorKind::Other,
-            format!("Failed to parse certificates: {}", e),
-        )
-    })?;
+    let certs =
+        certs(&mut BufReader::new(file)).collect::<Result<Vec<CertificateDer<'static>>, _>>();
+
+    let certs = certs.map_err(|e| anyhow::anyhow!("Failed to parse certificates: {}", e))?;
 
     if certs.is_empty() {
-        return Err(io::Error::new(
-            ErrorKind::Other,
-            "No certificates found in file",
-        ));
+        bail!("No certificates found in file");
     }
 
     Ok(certs)
 }
 
-fn load_key(path: &Path) -> io::Result<PrivateKeyDer<'static>> {
-    let file = File::open(path)
-        .map_err(|e| io::Error::new(ErrorKind::Other, format!("Failed to open key file: {}", e)))?;
+fn load_key(path: &Path) -> Result<PrivateKeyDer<'static>> {
+    let file = File::open(path).map_err(|e| anyhow!("Failed to open key file: {}", e))?;
 
     let key = private_key(&mut BufReader::new(file))
         .map_err(|e| {
@@ -99,12 +89,10 @@ impl TuicServer {
         config: crate::config::Config,
         shutdown_rx: Option<Receiver<()>>,
     ) -> Result<Self, Error> {
-        let socket = config.server_addr().parse().map_err(|e| {
-            Error::new(
-                ErrorKind::InvalidInput,
-                format!("Invalid server address: {}", e),
-            )
-        })?;
+        let socket = config
+            .server_addr()
+            .parse()
+            .map_err(|e| anyhow!("Failed to parse server adress with error:{}", e))?;
 
         let user_entries = config
             .users()
@@ -149,20 +137,10 @@ impl Server for TuicServer {
         let mut rustls_config =
             rustls::ServerConfig::builder_with_provider(CRYPTO_PROVIDER.clone())
                 .with_protocol_versions(TLS_PROTOCOL_VERSIONS)
-                .map_err(|e| {
-                    Error::new(
-                        ErrorKind::Other,
-                        format!("Failed to set TLS protocol versions: {}", e),
-                    )
-                })?
+                .map_err(|e| anyhow!("Failed to set TLS protocol versions: {}", e))?
                 .with_no_client_auth()
                 .with_single_cert(certs, key.into())
-                .map_err(|e| {
-                    Error::new(
-                        ErrorKind::Other,
-                        format!("Failed to configure TLS certificate: {}", e),
-                    )
-                })?;
+                .map_err(|e| anyhow!("Failed to configure TLS certificate: {}", e))?;
 
         rustls_config.alpn_protocols = vec![b"h3".to_vec()];
         rustls_config.max_early_data_size = u32::MAX;
@@ -172,16 +150,11 @@ impl Server for TuicServer {
             Arc::new(rustls_config),
             TLS13_AES_128_GCM_SHA256
                 .tls13()
-                .ok_or_else(|| Error::new(ErrorKind::Other, "Failed to get TLS 1.3 cipher suite"))?
+                .ok_or_else(|| anyhow!("Failed to get TLS 1.3 cipher suite"))?
                 .quic_suite()
-                .ok_or_else(|| Error::new(ErrorKind::Other, "Failed to get QUIC cipher suite"))?,
+                .ok_or_else(|| anyhow!("Failed to get QUIC cipher suite"))?,
         )
-        .map_err(|e| {
-            Error::new(
-                ErrorKind::Other,
-                format!("Failed to create QUIC server config: {}", e),
-            )
-        })?;
+        .map_err(|e| anyhow!("Failed to create QUIC server config: {}", e))?;
 
         let mut config = ServerConfig::with_crypto(Arc::new(quic_server_config));
 
@@ -194,12 +167,11 @@ impl Server for TuicServer {
                 .send_window(64 * 1024 * 1024)
                 .keep_alive_interval(Some(Duration::from_secs(10)))
                 .congestion_controller_factory(Arc::new(BbrConfig::default()))
-                .max_idle_timeout(Some(Duration::from_secs(30).try_into().map_err(|e| {
-                    Error::new(
-                        ErrorKind::InvalidInput,
-                        format!("Invalid idle timeout: {}", e),
-                    )
-                })?));
+                .max_idle_timeout(Some(
+                    Duration::from_secs(30)
+                        .try_into()
+                        .map_err(|e| anyhow!("Invalid idle timeout: {}", e))?,
+                ));
             tc
         };
 
@@ -211,17 +183,13 @@ impl Server for TuicServer {
                 SocketAddr::V6(_) => Domain::IPV6,
             };
 
-            let socket = Socket::new(domain, Type::DGRAM, Some(Protocol::UDP)).map_err(|e| {
-                Error::new(ErrorKind::Other, format!("Failed to create socket: {}", e))
-            })?;
+            let socket = Socket::new(domain, Type::DGRAM, Some(Protocol::UDP))
+                .map_err(|e| anyhow!("Failed to create socket: {}", e))?;
 
             if Domain::IPV6 == domain {
-                socket.set_only_v6(false).map_err(|e| {
-                    Error::new(
-                        ErrorKind::Other,
-                        format!("Failed to set IPv6 only mode: {}", e),
-                    )
-                })?;
+                socket
+                    .set_only_v6(false)
+                    .map_err(|e| anyhow!("Failed to set IPv6 only mode: {}", e))?;
             }
             socket.set_reuse_address(true)?;
             #[cfg(unix)]
@@ -247,9 +215,9 @@ impl Server for TuicServer {
             socket.set_recv_buffer_size(1 << 25)?;
             socket.set_send_buffer_size(1 << 25)?;
             socket.set_nonblocking(true)?;
-            socket.bind(&SockAddr::from(self.socket)).map_err(|e| {
-                Error::new(ErrorKind::Other, format!("Failed to bind socket: {}", e))
-            })?;
+            socket
+                .bind(&SockAddr::from(self.socket))
+                .map_err(|e| anyhow!("Failed to bind socket: {}", e))?;
 
             std::net::UdpSocket::from(socket)
         };
@@ -270,23 +238,17 @@ impl Server for TuicServer {
 
         match status {
             ServerStatus::Initializing(_) => {
-                Err(Error::new(ErrorKind::Other, "Server is still initializing"))
+                bail!("Server is still initializing");
             }
             ServerStatus::Running(_) => {
                 let ep = if let Some(ep) = &self.ep {
-                    let addr = ep.local_addr().map_err(|e| {
-                        Error::new(
-                            ErrorKind::Other,
-                            format!("Failed to get local address: {}", e),
-                        )
-                    })?;
+                    let addr = ep
+                        .local_addr()
+                        .map_err(|e| anyhow!("Failed to get local address: {}", e))?;
                     info!("Starting TUIC server on {}", addr);
                     ep
                 } else {
-                    return Err(Error::new(
-                        ErrorKind::Other,
-                        "Need to initialize EndPoint first, call init() method",
-                    ));
+                    bail!("Need to initialize EndPoint first, call init() method",);
                 };
 
                 let tuic_processor = Arc::clone(&self.processor);
@@ -382,10 +344,9 @@ impl Server for TuicServer {
                     }
                 }
             }
-            ServerStatus::Stopped(instant) => Err(Error::new(
-                ErrorKind::Other,
-                format!("Cannot start: server was stopped at {:?}", instant),
-            )),
+            ServerStatus::Stopped(instant) => {
+                bail!("Cannot start: server was stopped at {:?}", instant)
+            }
         }
     }
 
@@ -401,14 +362,8 @@ impl Server for TuicServer {
                 }
                 Ok(Instant::now())
             }
-            ServerStatus::Initializing(_) => Err(Error::new(
-                ErrorKind::Other,
-                "Cannot stop: server is still initializing",
-            )),
-            ServerStatus::Stopped(instant) => Err(Error::new(
-                ErrorKind::Other,
-                format!("Server is already stopped at {:?}", instant),
-            )),
+            ServerStatus::Initializing(_) => bail!("Cannot stop: server is still initializing",),
+            ServerStatus::Stopped(instant) => bail!("Server is already stopped at {:?}", instant),
         }
     }
 

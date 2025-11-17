@@ -1,5 +1,6 @@
-use std::{collections::HashMap, io::Error, sync::Arc, time::Instant};
+use std::{collections::HashMap, sync::Arc, time::Instant};
 
+use anyhow::Error;
 use async_trait::async_trait;
 use tokio::sync::{Mutex, watch::Receiver};
 use tracing::{error, info};
