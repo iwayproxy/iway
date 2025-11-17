@@ -1,6 +1,6 @@
 server_addr = "[::]:443"
 udp_session_timeout = 30
-udp_socket_timeout = 60
+udp_socket_timeout = 10
 cert_path = "server.crt"
 key_path = "server.key"
 

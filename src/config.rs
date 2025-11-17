@@ -45,7 +45,7 @@ impl Default for Config {
         Self {
             server_addr: "[::]:443".to_string(),
             udp_session_timeout: 30,
-            udp_socket_timeout: 60,
+            udp_socket_timeout: 10,
             cert_path: "server.crt".to_string(),
             key_path: "server.key".to_string(),
             udp_max_sessions: None,

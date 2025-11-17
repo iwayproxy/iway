@@ -9,7 +9,7 @@ use std::{
 
 use quinn::{RecvStream, SendStream};
 use tokio::{
-    io::{self, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
+    io::{self, AsyncRead, AsyncWrite, AsyncWriteExt, copy, sink},
     net::TcpStream,
 };
 use tokio_util::compat::TokioAsyncReadCompatExt;
@@ -75,8 +75,13 @@ impl ConnectProcessor {
             }
         };
 
-        let mut buf = Vec::new();
-        let _ = tcp_stream.read_to_end(&mut buf).await;
+        let bytes_copied = copy(&mut tcp_stream, &mut sink()).await?;
+        debug!(
+            "Droped {} bytes from {:?}",
+            bytes_copied,
+            tcp_stream.peer_addr()
+        );
+
         let _ = tcp_stream.shutdown().await;
 
         if let Err(e) = tcp_stream.flush().await {
