@@ -19,7 +19,7 @@ use tracing::{debug, error, info};
 use crate::authenticate::tuic::TuicAuthenticationManager;
 use crate::processor::ConnectionProcessor;
 use crate::processor::tuic::command::authenticate::AuthenticateProcessor;
-use crate::protocol::tuic::command::command::Command;
+use crate::protocol::tuic::command::Command;
 use command::packet::PacketProcessor;
 
 // #[derive(Debug)]
