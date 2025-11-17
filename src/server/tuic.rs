@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{self, BufReader, ErrorKind};
+use std::io::BufReader;
 use std::path::PathBuf;
 use std::sync::{Arc, LazyLock};
 use std::time::Duration;
@@ -32,7 +32,7 @@ fn load_certs(path: &Path) -> Result<Vec<CertificateDer<'static>>> {
     let certs =
         certs(&mut BufReader::new(file)).collect::<Result<Vec<CertificateDer<'static>>, _>>();
 
-    let certs = certs.map_err(|e| anyhow::anyhow!("Failed to parse certificates: {}", e))?;
+    let certs = certs.with_context(|| "Failed to parse certificates!")?;
 
     if certs.is_empty() {
         bail!("No certificates found in file");
@@ -42,20 +42,14 @@ fn load_certs(path: &Path) -> Result<Vec<CertificateDer<'static>>> {
 }
 
 fn load_key(path: &Path) -> Result<PrivateKeyDer<'static>> {
-    let file = File::open(path).map_err(|e| anyhow!("Failed to open key file: {}", e))?;
+    let file = File::open(path).context("Failed to open key file!")?;
 
-    let key = private_key(&mut BufReader::new(file))
-        .map_err(|e| {
-            io::Error::new(
-                ErrorKind::Other,
-                format!("Failed to parse private key: {}", e),
-            )
-        })?
-        .ok_or_else(|| {
-            io::Error::new(ErrorKind::Other, "No private key found in file".to_string())
-        })?;
-
-    Ok(key)
+    let key =
+        private_key(&mut BufReader::new(file)).with_context(|| "Failed to parse private key")?;
+    match key {
+        Some(key) => Ok(key),
+        None => bail!("No private key found in file"),
+    }
 }
 
 pub static TLS_PROTOCOL_VERSIONS: &[&rustls::SupportedProtocolVersion] = &[&rustls::version::TLS13];
@@ -92,7 +86,7 @@ impl TuicServer {
         let socket = config
             .server_addr()
             .parse()
-            .map_err(|e| anyhow!("Failed to parse server adress with error:{}", e))?;
+            .with_context(|| "Failed to parse server adress with error")?;
 
         let user_entries = config
             .users()
@@ -137,10 +131,10 @@ impl Server for TuicServer {
         let mut rustls_config =
             rustls::ServerConfig::builder_with_provider(CRYPTO_PROVIDER.clone())
                 .with_protocol_versions(TLS_PROTOCOL_VERSIONS)
-                .map_err(|e| anyhow!("Failed to set TLS protocol versions: {}", e))?
+                .with_context(|| "Failed to set TLS protocol versions!")?
                 .with_no_client_auth()
                 .with_single_cert(certs, key.into())
-                .map_err(|e| anyhow!("Failed to configure TLS certificate: {}", e))?;
+                .with_context(|| "Failed to configure TLS certificate!")?;
 
         rustls_config.alpn_protocols = vec![b"h3".to_vec()];
         rustls_config.max_early_data_size = u32::MAX;
@@ -154,7 +148,7 @@ impl Server for TuicServer {
                 .quic_suite()
                 .ok_or_else(|| anyhow!("Failed to get QUIC cipher suite"))?,
         )
-        .map_err(|e| anyhow!("Failed to create QUIC server config: {}", e))?;
+        .with_context(|| "Failed to create QUIC server config!")?;
 
         let mut config = ServerConfig::with_crypto(Arc::new(quic_server_config));
 
@@ -170,7 +164,7 @@ impl Server for TuicServer {
                 .max_idle_timeout(Some(
                     Duration::from_secs(30)
                         .try_into()
-                        .map_err(|e| anyhow!("Invalid idle timeout: {}", e))?,
+                        .with_context(|| "Invalid idle timeout!")?,
                 ));
             tc
         };
@@ -184,12 +178,12 @@ impl Server for TuicServer {
             };
 
             let socket = Socket::new(domain, Type::DGRAM, Some(Protocol::UDP))
-                .map_err(|e| anyhow!("Failed to create socket: {}", e))?;
+                .with_context(|| format!("Failed to create socket: {:?}!", domain))?;
 
             if Domain::IPV6 == domain {
                 socket
                     .set_only_v6(false)
-                    .map_err(|e| anyhow!("Failed to set IPv6 only mode: {}", e))?;
+                    .with_context(|| "Failed to set IPv6 only mode!")?;
             }
             socket.set_reuse_address(true)?;
             #[cfg(unix)]
@@ -217,7 +211,7 @@ impl Server for TuicServer {
             socket.set_nonblocking(true)?;
             socket
                 .bind(&SockAddr::from(self.socket))
-                .map_err(|e| anyhow!("Failed to bind socket: {}", e))?;
+                .with_context(|| format!("Failed to bind socket: {}", self.socket))?;
 
             std::net::UdpSocket::from(socket)
         };
@@ -244,7 +238,7 @@ impl Server for TuicServer {
                 let ep = if let Some(ep) = &self.ep {
                     let addr = ep
                         .local_addr()
-                        .map_err(|e| anyhow!("Failed to get local address: {}", e))?;
+                        .with_context(|| "Failed to get local address")?;
                     info!("Starting TUIC server on {}", addr);
                     ep
                 } else {

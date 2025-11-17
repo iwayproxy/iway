@@ -7,6 +7,7 @@ use std::io::{self, Cursor};
 use std::sync::Arc;
 use std::time::Duration;
 use udp_session_manager::UdpSessionManager;
+use uuid::Uuid;
 
 use async_trait::async_trait;
 use command::OneShotNotifier;
@@ -244,7 +245,7 @@ impl TuicConnectionProcessor {
         max_reassembly_bytes_per_session: Option<usize>,
     ) -> Self
     where
-        I: IntoIterator<Item = (uuid::Uuid, String)>,
+        I: IntoIterator<Item = (Uuid, String)>,
     {
         //command processors
         let authentication_manager = TuicAuthenticationManager::new(user_entries);

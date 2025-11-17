@@ -1,4 +1,4 @@
-use anyhow::{Context as AnyhowContext, Result};
+use anyhow::{Context as AnyhowContext, Result, bail};
 use socket2::{Domain, Socket, TcpKeepalive, Type};
 use std::{
     net::SocketAddr,
@@ -46,8 +46,8 @@ impl ConnectProcessor {
         {
             Ok(stream) => stream,
             Err(e) => {
-                debug!("Failed to connect to {}: {}", socket_addr, e);
-                return Err(e.into());
+                debug!("Failed to connect to {}, error:{}", socket_addr, e);
+                bail!("Failed to connect to {}, error:{}", socket_addr, e);
             }
         };
 
