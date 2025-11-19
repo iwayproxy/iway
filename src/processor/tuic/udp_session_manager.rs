@@ -6,7 +6,6 @@ use std::{
     time::{Duration, Instant},
 };
 use thiserror::Error;
-use tokio::time;
 use tracing::{debug, error, info};
 
 use crate::protocol::tuic::command::packet::Packet;
@@ -178,9 +177,8 @@ impl UdpSessionManager {
         let schedule_manager = manager.clone();
         {
             tokio::spawn(async move {
-                let mut interval = time::interval(schedule_manager.cleanup_interval);
                 loop {
-                    interval.tick().await;
+                    tokio::time::sleep(schedule_manager.cleanup_interval).await;
                     if let Err(e) = schedule_manager.cleanup_expired_sessions() {
                         error!("Error cleaning up expired sessions: {}", e);
                     }

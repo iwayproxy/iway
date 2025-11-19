@@ -29,10 +29,9 @@ impl PacketProcessor {
     pub async fn process(&self, connection: Connection, packet: Packet) -> Result<()> {
         let fragment = UdpFragment::from_packet(&packet);
 
-        let udp_session_manager = self.udp_session_manager.clone();
-
-        if let Some(reassembled) =
-            udp_session_manager.receive_fragment(fragment, connection.remote_address())
+        if let Some(reassembled) = &self
+            .udp_session_manager
+            .receive_fragment(fragment, connection.remote_address())
         {
             let dest_addr = packet.address;
 
