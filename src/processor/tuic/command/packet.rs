@@ -30,45 +30,37 @@ impl PacketProcessor {
         let fragment = UdpFragment::from_packet(&packet);
 
         let udp_session_manager = self.udp_session_manager.clone();
-        let connection = connection.clone();
 
-        let fut = async move {
-            if let Some(reassembled) =
-                udp_session_manager.receive_fragment(fragment, connection.remote_address())
-            {
-                let dest_addr = packet.address;
+        if let Some(reassembled) =
+            udp_session_manager.receive_fragment(fragment, connection.remote_address())
+        {
+            let dest_addr = packet.address;
 
-                let response = send_and_receive(dest_addr.clone(), &reassembled)
-                    .await
-                    .context("Failed to send and receive UDP packet")?;
+            let response = send_and_receive(dest_addr.clone(), &reassembled)
+                .await
+                .context("Failed to send and receive UDP packet")?;
 
-                let assoc_id = packet.assoc_id;
-                let pkt_id = packet.pkt_id;
-                let packets =
-                    Packet::get_packets_from(&response, assoc_id, pkt_id, dest_addr.clone());
-                if packets.is_empty() {
-                    bail!("No data packet is present at the moment.");
-                }
-
-                for packet in packets {
-                    let mut bytes = BytesMut::with_capacity(UDP_BUFFER_SIZE);
-                    packet.write_to_buf(&mut bytes);
-                    connection.send_datagram(bytes.freeze()).context(format!(
-                        "Failed to send data to client: {}",
-                        connection.remote_address()
-                    ))?;
-                }
-                debug!(
-                    "✅ Successfully processed UDP packet, dest: {} size: {}",
-                    dest_addr,
-                    response.len()
-                );
+            let assoc_id = packet.assoc_id;
+            let pkt_id = packet.pkt_id;
+            let packets = Packet::get_packets_from(&response, assoc_id, pkt_id, dest_addr.clone());
+            if packets.is_empty() {
+                bail!("No data packet is present at the moment.");
             }
 
-            Ok(())
-        };
-
-        tokio::spawn(fut);
+            for packet in packets {
+                let mut bytes = BytesMut::with_capacity(UDP_BUFFER_SIZE);
+                packet.write_to_buf(&mut bytes);
+                connection.send_datagram(bytes.freeze()).context(format!(
+                    "Failed to send data to client: {}",
+                    connection.remote_address()
+                ))?;
+            }
+            debug!(
+                "✅ Successfully processed UDP packet, dest: {} size: {}",
+                dest_addr,
+                response.len()
+            );
+        }
 
         Ok(())
     }

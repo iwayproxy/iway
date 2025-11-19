@@ -127,16 +127,6 @@ impl Address {
             AddressType::None => Ok(Address::None),
         }
     }
-
-    pub fn to_owned(&self) -> Self {
-        match self {
-            Address::SocketAddress(addr, cache) => Address::SocketAddress(*addr, cache.clone()),
-            Address::DomainAddress(domain, port, cache) => {
-                Address::DomainAddress(domain.clone(), *port, cache.clone())
-            }
-            Address::None => Address::None,
-        }
-    }
 }
 
 impl fmt::Display for Address {
