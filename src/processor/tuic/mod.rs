@@ -83,7 +83,7 @@ impl ConnectionProcessor for TuicConnectionProcessor {
                 }
 
                 Command::Packet(packet) => {
-                    let rx = notifier.clone();
+                    let rx = Arc::clone(&notifier);
                     if let Some(state) = rx.wait().await {
                         match state {
                             true => {
@@ -115,7 +115,7 @@ impl ConnectionProcessor for TuicConnectionProcessor {
                 }
 
                 Command::Dissociate(dissociate) => {
-                    let rx = notifier.clone();
+                    let rx = Arc::clone(&notifier);
                     if let Some(state) = rx.wait().await {
                         match state {
                             true => {

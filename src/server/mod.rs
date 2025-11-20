@@ -10,6 +10,8 @@ mod tuic;
 
 #[async_trait]
 pub trait Server: Send + Sync {
+    fn name(&self) -> &'static str;
+
     async fn init(&mut self) -> Result<Instant, Error>;
 
     async fn start(&mut self) -> Result<Instant, Error>;
@@ -44,16 +46,15 @@ impl ServerManager {
     }
 
     pub async fn init(&self) -> Result<Instant, Error> {
-        for (name, server) in &self.servers {
+        for (_, server) in &self.servers {
             let mut server = server.lock().await;
-            let name = name.clone();
 
             match server.init().await {
                 Ok(_) => {
-                    info!("Server {} initialized successfully", name);
+                    info!("Server {} initialized successfully", server.name());
                 }
                 Err(e) => {
-                    error!("Failed to initialize server {}: {}", name, e);
+                    error!("Failed to initialize server {}: {}", server.name(), e);
                 }
             }
         }

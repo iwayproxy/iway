@@ -35,13 +35,13 @@ impl PacketProcessor {
         {
             let dest_addr = packet.address;
 
-            let response = send_and_receive(dest_addr.clone(), &reassembled)
+            let response = send_and_receive(&dest_addr, &reassembled)
                 .await
                 .context("Failed to send and receive UDP packet")?;
 
             let assoc_id = packet.assoc_id;
             let pkt_id = packet.pkt_id;
-            let packets = Packet::get_packets_from(&response, assoc_id, pkt_id, dest_addr.clone());
+            let packets = Packet::get_packets_from(&response, assoc_id, pkt_id, &dest_addr);
             if packets.is_empty() {
                 bail!("No data packet is present at the moment.");
             }
@@ -65,7 +65,7 @@ impl PacketProcessor {
     }
 }
 
-async fn send_and_receive(dest: Address, data: &[u8]) -> Result<Vec<u8>> {
+async fn send_and_receive(dest: &Address, data: &[u8]) -> Result<Vec<u8>> {
     let Some(dest_socket_addr) = dest.to_socket_address().await else {
         bail!("Failed to resolve address to dest socket address {}", dest);
     };

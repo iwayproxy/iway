@@ -68,13 +68,13 @@ pub static CRYPTO_PROVIDER: LazyLock<Arc<CryptoProvider>> = LazyLock::new(|| {
 });
 
 pub struct TuicServer {
+    name: &'static str,
     socket: SocketAddr,
     ep: Option<Endpoint>,
     status: ServerStatus,
     processor: Arc<TuicConnectionProcessor>,
     cert_path: PathBuf,
     key_path: PathBuf,
-
     shutdown_rx: Option<Receiver<()>>,
 }
 
@@ -111,6 +111,7 @@ impl TuicServer {
         ));
 
         Ok(Self {
+            name: "TUIC v5",
             socket,
             ep: None,
             status: ServerStatus::Initializing(Instant::now()),
@@ -124,6 +125,10 @@ impl TuicServer {
 
 #[async_trait]
 impl Server for TuicServer {
+    fn name(&self) -> &'static str {
+        self.name
+    }
+
     async fn init(&mut self) -> Result<Instant, Error> {
         let certs = load_certs(&self.cert_path)?;
         let key = load_key(&self.key_path)?;
@@ -278,7 +283,7 @@ impl Server for TuicServer {
 
                                             let bidirectional_processor = Arc::clone(&tuic_processor);
                                             let bidirection_conn = connection.clone();
-                                            let rx = notifier.clone();
+                                            let rx = Arc::clone(&notifier);
                                             let t_bid = tokio::spawn(async move {
                                                 if let Some(state) = rx.wait().await {
                                                     match state {
@@ -297,7 +302,7 @@ impl Server for TuicServer {
 
                                             let datagram_processor = Arc::clone(&tuic_processor);
                                             let datagram_conn = connection.clone();
-                                            let rx = notifier.clone();
+                                            let rx = Arc::clone(&notifier);
                                             let t_dat = tokio::spawn(async move {
                                                 if let Some(state) = rx.wait().await {
                                                     match state {

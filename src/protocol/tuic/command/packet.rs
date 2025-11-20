@@ -27,7 +27,7 @@ impl Packet {
         full_payload: &[u8],
         assoc_id: u16,
         pkt_id: u16,
-        address: Address,
+        address: &Address,
     ) -> Vec<Packet> {
         let mut packets = Vec::new();
         let total_len = full_payload.len();

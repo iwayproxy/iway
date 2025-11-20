@@ -25,8 +25,8 @@ pub enum Address {
 impl Address {
     pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
         match self {
-            Address::SocketAddress(_, cache) => buf.put(cache.clone()),
-            Address::DomainAddress(_, _, cache) => buf.put(cache.clone()),
+            Address::SocketAddress(_, cache) => buf.put(cache.as_ref()),
+            Address::DomainAddress(_, _, cache) => buf.put(cache.as_ref()),
             Address::None => buf.put_u8(0xFF),
         }
     }
