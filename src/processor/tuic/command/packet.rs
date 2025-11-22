@@ -80,8 +80,8 @@ async fn send_and_receive(dest: &Address, data: &[u8]) -> Result<Vec<u8>> {
     let sent = socket.send_to(data, dest_socket_addr).await?;
     debug!("Has sent {} data to {}", sent, dest_socket_addr);
 
-    let mut all_packets = Vec::new();
-    let mut buf = vec![0u8; 65536];
+    let mut all_packets = vec![0];
+    let mut buf = vec![0u8; 4 * 1024];
 
     loop {
         let n = {

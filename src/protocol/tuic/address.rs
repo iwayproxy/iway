@@ -15,7 +15,7 @@ use tracing::debug;
 
 type Port = u16;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone)]
 pub enum Address {
     SocketAddress(SocketAddr, Bytes), //Add bytes for conversion cache, originally from client command
     DomainAddress(String, Port, Bytes), //Add bytes for conversion cache, originally from client command

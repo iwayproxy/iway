@@ -307,7 +307,7 @@ impl UdpSessionManager {
 
     pub fn cleanup_expired_sessions(&self) -> Result<(), UdpError> {
         let timeout = self.session_timeout;
-        let mut expired_keys = Vec::new();
+        let mut expired_keys = Vec::with_capacity(self.sessions.len());
 
         for item in self.sessions.iter() {
             if item.value().is_expired(timeout) {

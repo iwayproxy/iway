@@ -29,10 +29,10 @@ impl Packet {
         pkt_id: u16,
         address: &Address,
     ) -> Vec<Packet> {
-        let mut packets = Vec::new();
         let total_len = full_payload.len();
         let frag_total = ((total_len + MAX_PAYLOAD_PER_PACKET - 1) / MAX_PAYLOAD_PER_PACKET) as u8;
 
+        let mut packets = Vec::with_capacity(frag_total as usize);
         for (frag_id, chunk) in full_payload.chunks(MAX_PAYLOAD_PER_PACKET).enumerate() {
             packets.push(Packet {
                 header: Header::new(CommandType::Packet),
