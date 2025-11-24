@@ -51,7 +51,7 @@ impl PacketProcessor {
                 packet.write_to_buf(&mut bytes);
                 connection.send_datagram(bytes.freeze()).context(format!(
                     "Failed to send data to client: {}",
-                    connection.remote_address()
+                    &connection.remote_address()
                 ))?;
             }
             debug!(

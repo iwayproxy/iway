@@ -39,8 +39,6 @@ impl ConnectionProcessor for TuicConnectionProcessor {
         connection: Connection,
         notifier: Arc<OneShotNotifier>,
     ) -> io::Result<()> {
-        let remote = connection.remote_address();
-
         loop {
             let recv_stream = match connection.accept_uni().await {
                 Ok(recv_stream) => recv_stream,
@@ -70,7 +68,7 @@ impl ConnectionProcessor for TuicConnectionProcessor {
                         Ok(_) => {
                             debug!(
                                 "Successful to authenticate client, address: {}",
-                                connection.remote_address()
+                                &connection.remote_address()
                             );
                             notifier.notify(true);
                         }
@@ -87,7 +85,7 @@ impl ConnectionProcessor for TuicConnectionProcessor {
                     if let Some(state) = rx.wait().await {
                         match state {
                             true => {
-                                debug!("Received packet from {}", connection.remote_address());
+                                debug!("Received packet from {}", &connection.remote_address());
                                 let packet_processor = Arc::clone(&self.packet_processor);
                                 let connection = connection.clone();
 
@@ -107,7 +105,10 @@ impl ConnectionProcessor for TuicConnectionProcessor {
                                 });
                             }
                             false => {
-                                debug!("Do authentication failed, client: {}", remote);
+                                debug!(
+                                    "Do authentication failed, client: {}",
+                                    &connection.remote_address()
+                                );
                                 continue;
                             }
                         }
@@ -121,7 +122,8 @@ impl ConnectionProcessor for TuicConnectionProcessor {
                             true => {
                                 debug!(
                                     "Received dissociate from {} dissociate:{}",
-                                    remote, dissociate
+                                    &connection.remote_address(),
+                                    dissociate
                                 );
                                 let connection = connection.clone();
                                 let dissociate_processor = Arc::clone(&self.dissociate_processor);
@@ -131,7 +133,10 @@ impl ConnectionProcessor for TuicConnectionProcessor {
                                 });
                             }
                             false => {
-                                debug!("Do authentication failed, client: {}", remote);
+                                debug!(
+                                    "Do authentication failed, client: {}",
+                                    &connection.remote_address()
+                                );
                                 continue;
                             }
                         }
@@ -151,7 +156,6 @@ impl ConnectionProcessor for TuicConnectionProcessor {
 
     async fn process_bidirectional(&self, connection: Connection) -> io::Result<()> {
         while let Ok((send, mut recv)) = connection.accept_bi().await {
-            let remote = connection.remote_address();
             let connection = connection.clone();
             let connect_processor = Arc::clone(&self.connect_processor);
 
@@ -159,7 +163,11 @@ impl ConnectionProcessor for TuicConnectionProcessor {
                 let command = match Command::read_from(&mut recv).await {
                     Ok(command) => command,
                     Err(e) => {
-                        debug!("Failed to parse command from {} E: {}", remote, e);
+                        debug!(
+                            "Failed to parse command from {} E: {}",
+                            &connection.remote_address(),
+                            e
+                        );
                         for (i, cause) in e.chain().enumerate() {
                             debug!("{}: {}", i, cause);
                         }

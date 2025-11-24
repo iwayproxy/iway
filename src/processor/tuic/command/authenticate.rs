@@ -31,9 +31,11 @@ impl AuthenticateProcessor {
         };
 
         let mut buff: [u8; 32] = [0; 32];
-        if let Err(e) =
-            connection.export_keying_material(&mut buff, authenticate.uuid().as_bytes(), &password)
-        {
+        if let Err(e) = connection.export_keying_material(
+            &mut buff,
+            (&authenticate).uuid().as_bytes(),
+            &password,
+        ) {
             bail!(
                 "Failed to export keying material for uuid={} from={} err={:?}",
                 &authenticate.uuid(),

@@ -46,8 +46,8 @@ impl ConnectProcessor {
         {
             Ok(stream) => stream,
             Err(e) => {
-                debug!("Failed to connect to {}, error:{}", socket_addr, e);
-                bail!("Failed to connect to {}, error:{}", socket_addr, e);
+                debug!("Failed to connect to {}, error:{}", &socket_addr, e);
+                bail!("Failed to connect to {}, error:{}", &socket_addr, e);
             }
         };
 
@@ -66,12 +66,15 @@ impl ConnectProcessor {
             Ok((from_client, to_client)) => {
                 debug!(
                     "TCP connection to {} completed. Bytes: client→target: {}, target→client: {}",
-                    socket_addr, from_client, to_client
+                    &socket_addr, &from_client, &to_client
                 );
             }
             Err(e) => {
                 // surface as debug but attach context when returning
-                debug!("Error during TCP communication with {}: {}", socket_addr, e);
+                debug!(
+                    "Error during TCP communication with {}: {}",
+                    &socket_addr, e
+                );
             }
         };
 
@@ -79,7 +82,7 @@ impl ConnectProcessor {
         debug!(
             "Droped {} bytes from {:?}",
             bytes_copied,
-            tcp_stream.peer_addr()
+            &tcp_stream.peer_addr()
         );
 
         if let Err(e) = tcp_stream.flush().await {

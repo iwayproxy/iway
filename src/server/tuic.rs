@@ -269,7 +269,6 @@ impl Server for TuicServer {
                                 match incoming.accept() {
                                     Ok(connecting) => match connecting.await {
                                         Ok(connection) => {
-                                            let remote = connection.remote_address();
                                             let notifier = Arc::new(OneShotNotifier::new());
 
                                             let t_notifier = Arc::clone(&notifier);
@@ -293,7 +292,7 @@ impl Server for TuicServer {
                                                                 .await;
                                                         }
                                                         false => {
-                                                            debug!("Do authentication failed, client: {}", remote);
+                                                            debug!("Do authentication failed, client: {}", &bidirection_conn.remote_address());
                                                             return;
                                                         }
                                                     }
@@ -312,7 +311,7 @@ impl Server for TuicServer {
                                                                 .await;
                                                         }
                                                         false => {
-                                                            debug!("Do authentication failed, client: {}", remote);
+                                                            debug!("Do authentication failed, client: {}", &datagram_conn.remote_address());
                                                             return;
                                                         }
                                                     }
@@ -320,7 +319,7 @@ impl Server for TuicServer {
                                             });
 
                                             let _ = tokio::join!(t_uni, t_bid, t_dat);
-                                            debug!("Connection with {} has finished!", remote);
+                                            debug!("Connection with {} has finished!", &connection.remote_address());
                                         }
                                         Err(e) => {
                                             debug!("Connecting await failed: {}", e);

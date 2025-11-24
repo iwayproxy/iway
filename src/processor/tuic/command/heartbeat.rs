@@ -15,7 +15,7 @@ impl HeartbeatProcessor {
         debug!(
             "Processing heartbeat : {:?} from {}",
             heartbeat,
-            connection.remote_address()
+            &connection.remote_address()
         );
         Ok(())
     }
