@@ -24,14 +24,14 @@ impl AuthenticateProcessor {
             Err(_) => {
                 bail!(
                     "Failed to authencate client: {}, uuid: {} is not existed:",
-                    connection.remote_address(),
+                    &connection.remote_address(),
                     &authenticate.uuid()
                 );
             }
         };
 
         let mut buff: [u8; 32] = [0; 32];
-        if let Err(e) = connection.export_keying_material(
+        if let Err(e) = &connection.export_keying_material(
             &mut buff,
             (&authenticate).uuid().as_bytes(),
             &password,
@@ -39,7 +39,7 @@ impl AuthenticateProcessor {
             bail!(
                 "Failed to export keying material for uuid={} from={} err={:?}",
                 &authenticate.uuid(),
-                connection.remote_address(),
+                &connection.remote_address(),
                 e
             );
         }
@@ -49,7 +49,7 @@ impl AuthenticateProcessor {
             _ => {
                 bail!(
                     "Failed to verify client token! client: {}, uuid: {}",
-                    connection.remote_address(),
+                    &connection.remote_address(),
                     &authenticate.uuid()
                 )
             }
