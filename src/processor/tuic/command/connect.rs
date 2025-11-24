@@ -125,7 +125,7 @@ pub async fn connect_with_keepalive(
     if let Err(e) = stream.writable().await {
         return Err(std::io::Error::new(
             std::io::ErrorKind::NotConnected,
-            format!("Connect failed target:{:?} error: {}", addr, e),
+            format!("Connect failed target:{:?} error: {}", &addr, e),
         ));
     };
 

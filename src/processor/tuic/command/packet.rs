@@ -33,15 +33,15 @@ impl PacketProcessor {
             .udp_session_manager
             .receive_fragment(fragment, connection.remote_address())
         {
-            let dest_addr = packet.address;
+            // let dest_addr = packet.address;
 
-            let response = send_and_receive(&dest_addr, &reassembled)
+            let response = send_and_receive(&packet.address, &reassembled)
                 .await
                 .context("Failed to send and receive UDP packet")?;
 
             let assoc_id = packet.assoc_id;
             let pkt_id = packet.pkt_id;
-            let packets = Packet::get_packets_from(&response, assoc_id, pkt_id, &dest_addr);
+            let packets = Packet::get_packets_from(&response, assoc_id, pkt_id, &packet.address);
             if packets.is_empty() {
                 bail!("No data packet is present at the moment.");
             }
@@ -56,8 +56,8 @@ impl PacketProcessor {
             }
             debug!(
                 "✅ Successfully processed UDP packet, dest: {} size: {}",
-                dest_addr,
-                response.len()
+                &packet.address,
+                &response.len()
             );
         }
 
