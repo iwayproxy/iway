@@ -33,7 +33,7 @@ impl fmt::Display for Dissociate {
         write!(
             f,
             "Header: {} Command: Dissociate {}",
-            self.header, self.asso_id
+            &self.header, &self.asso_id
         )
     }
 }

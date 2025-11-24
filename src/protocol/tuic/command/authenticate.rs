@@ -66,9 +66,9 @@ impl fmt::Display for Authenticate {
         write!(
             f,
             "header:{} uuid:{} token_len:{}",
-            self.header,
-            self.uuid,
-            self.token.len(),
+            &self.header,
+            &self.uuid,
+            &self.token.len(),
         )
     }
 }

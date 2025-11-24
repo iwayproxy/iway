@@ -30,6 +30,6 @@ impl Connect {
 
 impl fmt::Display for Connect {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "header:{} address:{}", self.header, self.address)
+        write!(f, "header:{} address:{}", &self.header, &self.address)
     }
 }

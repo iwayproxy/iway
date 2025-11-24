@@ -184,7 +184,7 @@ impl ConnectionProcessor for TuicConnectionProcessor {
                     }
                     _ => {
                         tokio::spawn(async move {
-                            error!("Received unexpected command type: {}", command);
+                            error!("Received unexpected command type: {}", &command);
                             connection.close(
                                 VarInt::from_u32(0xffff),
                                 b"Received unexpected command type!",
@@ -225,7 +225,10 @@ impl ConnectionProcessor for TuicConnectionProcessor {
                 }
 
                 Ok(command) => {
-                    debug!("Received unexpected command type via datagram: {}", command);
+                    debug!(
+                        "Received unexpected command type via datagram: {}",
+                        &command
+                    );
                 }
                 Err(e) => {
                     debug!("Failed to parse datagram command: {}", e);

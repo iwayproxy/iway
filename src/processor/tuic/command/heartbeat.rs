@@ -14,7 +14,7 @@ impl HeartbeatProcessor {
     pub async fn process(&self, heartbeat: Heartbeat, connection: Connection) -> Result<()> {
         debug!(
             "Processing heartbeat : {:?} from {}",
-            heartbeat,
+            &heartbeat,
             &connection.remote_address()
         );
         Ok(())

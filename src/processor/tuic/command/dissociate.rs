@@ -23,11 +23,11 @@ impl DissociateProcess {
     pub async fn process(&self, connection: Connection, dissociate: Dissociate) -> Result<()> {
         debug!(
             "Processing dissociate : {:?} from {}",
-            dissociate,
-            dissociate.assoc_id()
+            &dissociate,
+            &dissociate.assoc_id()
         );
         self.udp_session_manager
-            .remove_session(connection.remote_address(), dissociate.assoc_id());
+            .remove_session((&connection).remote_address(), (&dissociate).assoc_id());
         Ok(())
     }
 }

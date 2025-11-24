@@ -34,7 +34,7 @@ impl ConnectProcessor {
             .address()
             .to_socket_address()
             .await
-            .context(format!("Failed to resolve address {}", connect.address()))?;
+            .context(format!("Failed to resolve address {}", &connect.address()))?;
 
         let mut tcp_stream = match connect_with_keepalive(
             socket_addr,

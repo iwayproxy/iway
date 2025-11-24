@@ -301,7 +301,7 @@ impl UdpSessionManager {
     pub fn remove_session(&self, client: SocketAddr, assoc_id: u16) {
         if let Some((_, mut buffer)) = self.sessions.remove(&(client, assoc_id)) {
             buffer.shrink_to_fit();
-            debug!("Removed session for {:?}", (client, assoc_id));
+            debug!("Removed session for {:?}", (&client, assoc_id));
         }
     }
 

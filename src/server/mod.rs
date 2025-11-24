@@ -51,10 +51,10 @@ impl ServerManager {
 
             match server.init().await {
                 Ok(_) => {
-                    info!("Server {} initialized successfully", server.name());
+                    info!("Server {} initialized successfully", &server.name());
                 }
                 Err(e) => {
-                    error!("Failed to initialize server {}: {}", server.name(), e);
+                    error!("Failed to initialize server {}: {}", &server.name(), e);
                 }
             }
         }
@@ -85,11 +85,11 @@ impl ServerManager {
                     let mut server = server.lock().await;
                     match server.stop().await {
                         Ok(instant) => {
-                            info!("Server {} stopped successfully", name);
+                            info!("Server {} stopped successfully", &name);
                             Ok(instant)
                         }
                         Err(e) => {
-                            error!("Failed to stop server {}: {}", name, e);
+                            error!("Failed to stop server {}: {}", &name, e);
                             Err(e)
                         }
                     }
