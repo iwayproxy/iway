@@ -1,5 +1,5 @@
 use anyhow::{Context as AnyhowContext, Result, bail};
-use socket2::{Domain, Socket, TcpKeepalive, Type};
+use socket2::{Domain, Socket, Type};
 use std::{
     net::SocketAddr,
     pin::Pin,
@@ -9,7 +9,7 @@ use std::{
 
 use quinn::{RecvStream, SendStream};
 use tokio::{
-    io::{self, AsyncRead, AsyncWrite, AsyncWriteExt, copy, sink},
+    io::{self, AsyncRead, AsyncWrite, copy, sink},
     net::TcpStream,
 };
 use tokio_util::compat::TokioAsyncReadCompatExt;
@@ -85,41 +85,25 @@ impl ConnectProcessor {
             &tcp_stream.peer_addr()
         );
 
-        if let Err(e) = tcp_stream.flush().await {
-            debug!("tcp_stream.flush() error: {}", e);
-        }
-
-        if let Err(e) = tcp_stream.shutdown().await {
-            debug!("tcp_stream.shutdown() error: {}", e);
-        }
-
         Ok(())
     }
 }
 
 pub async fn connect_with_keepalive(
     addr: SocketAddr,
-    keepalive_idle: Duration,
-    keepalive_interval: Duration,
-    retries: u32,
+    _keepalive_idle: Duration,
+    _keepalive_interval: Duration,
+    _retries: u32,
 ) -> std::io::Result<TcpStream> {
     let socket = Socket::new(Domain::for_address(addr), Type::STREAM, None)?;
     socket.set_nonblocking(true)?;
-
-    let keepalive = TcpKeepalive::new()
-        .with_time(keepalive_idle)
-        .with_interval(keepalive_interval)
-        .with_retries(retries);
-
-    socket.set_tcp_keepalive(&keepalive)?;
+    socket.set_linger(Some(Duration::ZERO))?;
 
     match socket.connect(&addr.into()) {
         Ok(_) => {}
         Err(e) if e.raw_os_error() == Some(libc::EINPROGRESS) => {}
         Err(e) => return Err(e),
     }
-
-    socket.set_linger(Some(Duration::ZERO))?;
 
     let stream = TcpStream::from_std(socket.into())?;
     if let Err(e) = stream.writable().await {
