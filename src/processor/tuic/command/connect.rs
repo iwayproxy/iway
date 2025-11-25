@@ -119,7 +119,7 @@ pub async fn connect_with_keepalive(
         Err(e) => return Err(e),
     }
 
-    socket.set_linger(Some(Duration::from_secs(5)))?;
+    socket.set_linger(Some(Duration::ZERO))?;
 
     let stream = TcpStream::from_std(socket.into())?;
     if let Err(e) = stream.writable().await {
