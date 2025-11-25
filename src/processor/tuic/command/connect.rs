@@ -29,7 +29,6 @@ impl ConnectProcessor {
             .await
             .context(format!("Failed to resolve address {}", &connect.address()))?;
 
-        // 建连（含 linger=0）
         let tcp_stream = match connect_with_keepalive(
             socket_addr,
             Duration::from_secs(5),
