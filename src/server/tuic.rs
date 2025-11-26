@@ -23,7 +23,7 @@ use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls_pemfile::{certs, private_key};
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::sync::watch::Receiver;
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 
 fn load_certs(path: &Path) -> Result<Vec<CertificateDer<'static>>> {
     let file =
@@ -280,42 +280,36 @@ impl Server for TuicServer {
                                                     .await;
                                             });
 
+                                            //Waiting for authoration
+                                            let rx = Arc::clone(&notifier);
+                                            match rx.wait().await {
+                                                Some(state) => {
+                                                    if state {
+                                                        debug!("Authorized client: {} !", &connection.remote_address());
+                                                    } else {
+                                                        error!("Failed to authorize client: {}", &connection.remote_address());
+                                                        return;
+                                                    }
+                                                },
+                                                None => {
+                                                    error!("Failed to authorize client: {}, timeout!", &connection.remote_address());
+                                                },
+                                            }
+
                                             let bidirectional_processor = Arc::clone(&tuic_processor);
                                             let bidirection_conn = connection.clone();
-                                            let rx = Arc::clone(&notifier);
                                             let t_bid = tokio::spawn(async move {
-                                                if let Some(state) = rx.wait().await {
-                                                    match state {
-                                                        true => {
-                                                            let _ = bidirectional_processor
-                                                                .process_bidirectional(bidirection_conn)
-                                                                .await;
-                                                        }
-                                                        false => {
-                                                            debug!("Do authentication failed, client: {}", &bidirection_conn.remote_address());
-                                                            return;
-                                                        }
-                                                    }
-                                                }
+                                                 let _ = bidirectional_processor
+                                                                    .process_bidirectional(bidirection_conn)
+                                                                    .await;
                                             });
 
                                             let datagram_processor = Arc::clone(&tuic_processor);
                                             let datagram_conn = connection.clone();
-                                            let rx = Arc::clone(&notifier);
                                             let t_dat = tokio::spawn(async move {
-                                                if let Some(state) = rx.wait().await {
-                                                    match state {
-                                                        true => {
-                                                            let _ = datagram_processor
+                                                let _ = datagram_processor
                                                                 .process_datagram(datagram_conn)
                                                                 .await;
-                                                        }
-                                                        false => {
-                                                            debug!("Do authentication failed, client: {}", &datagram_conn.remote_address());
-                                                            return;
-                                                        }
-                                                    }
-                                                }
                                             });
 
                                             let _ = tokio::join!(t_uni, t_bid, t_dat);
