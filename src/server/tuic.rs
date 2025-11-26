@@ -293,6 +293,7 @@ impl Server for TuicServer {
                                                 },
                                                 None => {
                                                     error!("Failed to authorize client: {}, timeout!", &connection.remote_address());
+                                                    return;
                                                 },
                                             }
 
