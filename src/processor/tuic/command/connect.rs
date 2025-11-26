@@ -2,10 +2,7 @@ use anyhow::{Context as AnyhowContext, Result, bail};
 use quinn::{RecvStream, SendStream};
 use socket2::{Domain, Socket, Type};
 use std::{net::SocketAddr, time::Duration};
-use tokio::{
-    io::{self, AsyncWriteExt},
-    net::TcpStream,
-};
+use tokio::{io, net::TcpStream};
 use tracing::debug;
 
 use crate::protocol::tuic::command::connect::Connect;
@@ -51,15 +48,11 @@ impl ConnectProcessor {
 
         let quic_to_tcp = async {
             let n = io::copy(&mut quic_recv, &mut tcp_write).await?;
-            tcp_write.shutdown().await?;
             Ok::<_, std::io::Error>(n)
         };
 
         let tcp_to_quic = async {
             let n = io::copy(&mut tcp_read, &mut quic_send).await?;
-            quic_send
-                .finish()
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
             Ok::<_, std::io::Error>(n)
         };
 
