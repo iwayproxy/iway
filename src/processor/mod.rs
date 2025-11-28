@@ -1,5 +1,6 @@
-use std::{io::Error, sync::Arc};
+use std::sync::Arc;
 
+use anyhow::Result;
 use async_trait::async_trait;
 use quinn::Connection;
 use tuic::command::OneShotNotifier;
@@ -12,9 +13,9 @@ pub trait ConnectionProcessor: Send + Sync {
         &self,
         connection: Connection,
         notifier: Arc<OneShotNotifier>,
-    ) -> Result<(), Error>;
+    ) -> Result<()>;
 
-    async fn process_bidirectional(&self, connection: Connection) -> Result<(), Error>;
+    async fn process_bidirectional(&self, connection: Connection) -> Result<()>;
 
-    async fn process_datagram(&self, connection: Connection) -> Result<(), Error>;
+    async fn process_datagram(&self, connection: Connection) -> Result<()>;
 }

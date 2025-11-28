@@ -66,7 +66,7 @@ fn init_logger() {
 
 fn recommended_worker_threads(cpu_load_ratio: f64) -> usize {
     let cpus = num_cpus::get();
-    max(2, (cpus as f64 * cpu_load_ratio).round() as usize)
+    max(1, (cpus as f64 * cpu_load_ratio).round() as usize)
 }
 
 fn main() {

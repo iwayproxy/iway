@@ -1,9 +1,9 @@
 pub mod command;
 pub mod udp_session_manager;
 
-use anyhow::Context;
+use anyhow::{Context, Result, bail};
 use command::dissociate::DissociateProcess;
-use std::io::{self, Cursor};
+use std::io::Cursor;
 use std::sync::Arc;
 use std::time::Duration;
 use udp_session_manager::UdpSessionManager;
@@ -38,7 +38,7 @@ impl ConnectionProcessor for TuicConnectionProcessor {
         &self,
         connection: Connection,
         notifier: Arc<OneShotNotifier>,
-    ) -> io::Result<()> {
+    ) -> Result<()> {
         loop {
             let recv_stream = match connection.accept_uni().await {
                 Ok(recv_stream) => recv_stream,
@@ -154,74 +154,62 @@ impl ConnectionProcessor for TuicConnectionProcessor {
         Ok(())
     }
 
-    async fn process_bidirectional(&self, connection: Connection) -> io::Result<()> {
+    async fn process_bidirectional(&self, connection: Connection) -> Result<()> {
         while let Ok((send, mut recv)) = connection.accept_bi().await {
             let connection = connection.clone();
             let connect_processor = Arc::clone(&self.connect_processor);
 
-            let processing = async move {
-                let command = match Command::read_from(&mut recv).await {
-                    Ok(command) => command,
-                    Err(e) => {
-                        debug!(
-                            "Failed to parse command from {} E: {}",
-                            &connection.remote_address(),
-                            e
-                        );
-                        for (i, cause) in e.chain().enumerate() {
-                            debug!("{}: {}", i, cause);
-                        }
-                        return;
+            let command = match Command::read_from(&mut recv).await {
+                Ok(command) => command,
+                Err(e) => {
+                    debug!(
+                        "Failed to parse command from {} E: {}",
+                        &connection.remote_address(),
+                        e
+                    );
+                    for (i, cause) in e.chain().enumerate() {
+                        debug!("{}: {}", i, cause);
                     }
-                };
-                match command {
-                    Command::Connect(connect) => {
-                        tokio::spawn(async move {
-                            if let Err(e) = connect_processor.process(send, recv, connect).await {
-                                debug!("Failed to process Connect command: {}", e);
-                            }
-                        });
-                    }
-                    _ => {
-                        tokio::spawn(async move {
-                            error!("Received unexpected command type: {}", &command);
-                            connection.close(
-                                VarInt::from_u32(0xffff),
-                                b"Received unexpected command type!",
-                            );
-                        });
-                    }
-                };
+                    bail!("Faile to parse command: {}", e);
+                }
             };
-
-            tokio::spawn(processing);
+            match command {
+                Command::Connect(connect) => {
+                    tokio::spawn(async move {
+                        if let Err(e) = connect_processor.process(send, recv, connect).await {
+                            debug!("Failed to process Connect command: {}", e);
+                        }
+                    });
+                }
+                _ => {
+                    tokio::spawn(async move {
+                        error!("Received unexpected command type: {}", &command);
+                        connection.close(
+                            VarInt::from_u32(0xffff),
+                            b"Received unexpected command type!",
+                        );
+                    });
+                }
+            };
         }
 
         Ok(())
     }
 
-    async fn process_datagram(&self, connection: Connection) -> io::Result<()> {
+    async fn process_datagram(&self, connection: Connection) -> Result<()> {
         while let Ok(bytes) = connection.read_datagram().await {
             let mut cursor = Cursor::new(&bytes);
             match Command::read_from(&mut cursor).await {
                 Ok(Command::Packet(packet)) => {
                     let connection = connection.clone();
                     let packet_processor = Arc::clone(&self.packet_processor);
-                    tokio::spawn(async move {
-                        if let Err(e) = packet_processor.process(connection, packet).await {
-                            debug!("Failed to process datagram packet: {}", e);
-                        }
-                    });
+                    let _ = packet_processor.process(connection, packet).await;
                 }
 
                 Ok(Command::Heartbeat(heartbeat)) => {
                     let connection = connection.clone();
                     let heartbeat_processor = Arc::clone(&self.heartbeat_processor);
-                    tokio::spawn(async move {
-                        if let Err(e) = heartbeat_processor.process(heartbeat, connection).await {
-                            debug!("Failed to process datagram heartbeat: {}", e);
-                        }
-                    });
+                    let _ = heartbeat_processor.process(heartbeat, connection).await;
                 }
 
                 Ok(command) => {
