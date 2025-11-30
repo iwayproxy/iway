@@ -1,6 +1,6 @@
 use anyhow::{Context as AnyhowContext, Result, bail};
 use quinn::{RecvStream, SendStream};
-use socket2::{Domain, Socket, Type};
+use socket2::{Domain, Socket, TcpKeepalive, Type};
 use std::{net::SocketAddr, time::Duration};
 use tokio::{
     io::{self, AsyncWriteExt},
@@ -49,30 +49,29 @@ impl ConnectProcessor {
         let mut quic_recv = recv;
         let mut quic_send = send;
 
-        let quic_to_tcp = async { io::copy(&mut quic_recv, &mut tcp_write).await };
+        let quic_to_tcp = async {
+            let r = io::copy(&mut quic_recv, &mut tcp_write).await;
+            let _ = tcp_write.shutdown().await;
+            r
+        };
 
-        let tcp_to_quic = async { io::copy(&mut tcp_read, &mut quic_send).await };
+        let tcp_to_quic = async {
+            let r = io::copy(&mut tcp_read, &mut quic_send).await;
+            let _ = quic_send.finish();
+            r
+        };
 
-        let result = tokio::try_join!(quic_to_tcp, tcp_to_quic);
-
-        let _ = tcp_write.shutdown().await;
-        drop(tcp_write);
-        drop(tcp_read);
-
-        match result {
-            Ok((from_client, to_client)) => {
-                debug!(
-                    "TCP connection to {} completed. Bytes: client→target: {}, target→client: {}",
-                    &socket_addr, &from_client, &to_client
-                );
+        tokio::select! {
+            _ = quic_to_tcp => {
+                let _ = quic_send.finish();
             }
-            Err(e) => {
-                debug!(
-                    "Error during TCP communication with {}: {}",
-                    &socket_addr, e
-                );
+            _ = tcp_to_quic => {
+                let _ = tcp_write.shutdown().await;
             }
         }
+
+        drop(tcp_write);
+        drop(tcp_read);
 
         Ok(())
     }
@@ -80,13 +79,18 @@ impl ConnectProcessor {
 
 pub async fn connect_with_keepalive(
     addr: SocketAddr,
-    _keepalive_idle: Duration,
-    _keepalive_interval: Duration,
-    _retries: u32,
+    keepalive_idle: Duration,
+    keepalive_interval: Duration,
+    retries: u32,
 ) -> Result<TcpStream> {
     let socket = Socket::new(Domain::for_address(addr), Type::STREAM, None)?;
     socket.set_nonblocking(true)?;
     socket.set_linger(Some(Duration::ZERO))?;
+    let keepalive = TcpKeepalive::new()
+        .with_time(keepalive_idle)
+        .with_interval(keepalive_interval)
+        .with_retries(retries);
+    socket.set_tcp_keepalive(&keepalive)?;
 
     match socket.connect(&addr.into()) {
         Ok(_) => {}
