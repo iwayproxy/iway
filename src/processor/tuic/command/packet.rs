@@ -2,7 +2,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
-
 use tokio::time::timeout;
 
 use crate::processor::tuic::udp_session_manager::{UdpFragment, UdpSessionManager};
@@ -33,8 +32,6 @@ impl PacketProcessor {
             .udp_session_manager
             .receive_fragment(fragment, connection.remote_address())
         {
-            // let dest_addr = packet.address;
-
             let response = send_and_receive(&packet.address, &reassembled)
                 .await
                 .context("Failed to send and receive UDP packet")?;

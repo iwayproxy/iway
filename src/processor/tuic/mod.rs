@@ -203,23 +203,31 @@ impl ConnectionProcessor for TuicConnectionProcessor {
                 Ok(Command::Packet(packet)) => {
                     let connection = connection.clone();
                     let packet_processor = Arc::clone(&self.packet_processor);
-                    let _ = packet_processor.process(connection, packet).await;
+                    tokio::spawn(async move {
+                        if let Err(e) = packet_processor.process(connection, packet).await {
+                            debug!("Failed to process datagram packet: {}", e);
+                        }
+                    });
                 }
 
                 Ok(Command::Heartbeat(heartbeat)) => {
                     let connection = connection.clone();
                     let heartbeat_processor = Arc::clone(&self.heartbeat_processor);
-                    let _ = heartbeat_processor.process(heartbeat, connection).await;
+                    tokio::spawn(async move {
+                        if let Err(e) = heartbeat_processor.process(heartbeat, connection).await {
+                            debug!("Failed to process datagram heartbeat: {}", e);
+                        }
+                    });
                 }
 
                 Ok(command) => {
-                    debug!(
+                    error!(
                         "Received unexpected command type via datagram: {}",
                         &command
                     );
                 }
                 Err(e) => {
-                    debug!("Failed to parse datagram command: {}", e);
+                    error!("Failed to parse datagram command: {}", e);
                 }
             }
         }
