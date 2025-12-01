@@ -5,7 +5,6 @@ use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 use std::{net::SocketAddr, path::Path, time::Instant};
 
-use crate::processor::ConnectionProcessor;
 use crate::processor::tuic::TuicConnectionProcessor;
 use crate::processor::tuic::command::OneShotNotifier;
 
@@ -269,6 +268,7 @@ impl Server for TuicServer {
                                 match incoming.accept() {
                                     Ok(connecting) => match connecting.await {
                                         Ok(connection) => {
+                                            info!("New connection connected (ID: {})", &connection.stable_id());
                                             let notifier = Arc::new(OneShotNotifier::new());
 
                                             let t_notifier = Arc::clone(&notifier);
@@ -315,6 +315,7 @@ impl Server for TuicServer {
 
                                             let _ = tokio::join!(t_uni, t_bid, t_dat);
                                             debug!("Connection with {} has finished!", &connection.remote_address());
+                                            info!("The connection (ID:{}) was closed!", &connection.stable_id());
                                         }
                                         Err(e) => {
                                             debug!("Connecting await failed: {}", e);

@@ -32,6 +32,7 @@ tracing-appender = "0.2"
 zeroize = { version = "1.6", features = ["derive"] }
 # constant-time comparison to prevent timing attacks
 subtle = "2.5"
+zerocopy = { version = "0.8.31", features = ["derive"] }
 
 [profile.release]
 opt-level = 3

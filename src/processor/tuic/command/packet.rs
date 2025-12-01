@@ -77,19 +77,27 @@ async fn send_and_receive(dest: &Address, data: &[u8]) -> Result<Vec<u8>> {
     let sent = socket.send_to(data, dest_socket_addr).await?;
     debug!("Has sent {} data to {}", sent, &dest_socket_addr);
 
-    let mut all_packets = vec![0];
+    let mut all_packets = Vec::new();
     let mut buf = vec![0u8; 4 * 1024];
+    let mut consecutive_timeouts = 0usize;
 
     loop {
         let n = {
-            match timeout(Duration::from_secs(3), socket.recv_from(&mut buf)).await {
-                Ok(Ok((n, _addr))) => Some(n),
+            match timeout(Duration::from_millis(200), socket.recv_from(&mut buf)).await {
+                Ok(Ok((n, _addr))) => {
+                    consecutive_timeouts = 0;
+                    Some(n)
+                }
                 Ok(Err(e)) => {
                     debug!("Error while receiving from socket: {}", e);
                     None
                 }
                 Err(_) => {
-                    debug!("Timed out waiting for socket to receive data");
+                    consecutive_timeouts += 1;
+                    if consecutive_timeouts >= 3 {
+                        debug!("No more data after 3 consecutive timeouts");
+                        break;
+                    }
                     None
                 }
             }
@@ -99,9 +107,7 @@ async fn send_and_receive(dest: &Address, data: &[u8]) -> Result<Vec<u8>> {
             Some(n) => {
                 all_packets.extend_from_slice(&buf[..n]);
             }
-            None => {
-                break;
-            }
+            None => {}
         }
     }
 

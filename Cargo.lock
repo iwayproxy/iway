@@ -377,6 +377,7 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber",
  "uuid",
+ "zerocopy",
  "zeroize",
 ]
 

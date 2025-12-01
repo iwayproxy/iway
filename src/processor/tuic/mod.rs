@@ -9,7 +9,6 @@ use std::time::Duration;
 use udp_session_manager::UdpSessionManager;
 use uuid::Uuid;
 
-use async_trait::async_trait;
 use command::OneShotNotifier;
 use command::connect::ConnectProcessor;
 use command::heartbeat::HeartbeatProcessor;
@@ -18,7 +17,6 @@ use quinn::{Connection, VarInt};
 use tracing::{debug, error, info};
 
 use crate::authenticate::tuic::TuicAuthenticationManager;
-use crate::processor::ConnectionProcessor;
 use crate::processor::tuic::command::authenticate::AuthenticateProcessor;
 use crate::protocol::tuic::command::Command;
 use command::packet::PacketProcessor;
@@ -32,9 +30,8 @@ pub struct TuicConnectionProcessor {
     packet_processor: Arc<PacketProcessor>,
 }
 
-#[async_trait]
-impl ConnectionProcessor for TuicConnectionProcessor {
-    async fn process_uni(
+impl TuicConnectionProcessor {
+    pub async fn process_uni(
         &self,
         connection: Connection,
         notifier: Arc<OneShotNotifier>,
@@ -154,7 +151,7 @@ impl ConnectionProcessor for TuicConnectionProcessor {
         Ok(())
     }
 
-    async fn process_bidirectional(&self, connection: Connection) -> Result<()> {
+    pub async fn process_bidirectional(&self, connection: Connection) -> Result<()> {
         while let Ok((send, mut recv)) = connection.accept_bi().await {
             let connection = connection.clone();
             let connect_processor = Arc::clone(&self.connect_processor);
@@ -196,7 +193,7 @@ impl ConnectionProcessor for TuicConnectionProcessor {
         Ok(())
     }
 
-    async fn process_datagram(&self, connection: Connection) -> Result<()> {
+    pub async fn process_datagram(&self, connection: Connection) -> Result<()> {
         while let Ok(bytes) = connection.read_datagram().await {
             let mut cursor = Cursor::new(&bytes);
             match Command::read_from(&mut cursor).await {
@@ -234,9 +231,7 @@ impl ConnectionProcessor for TuicConnectionProcessor {
 
         Ok(())
     }
-}
 
-impl TuicConnectionProcessor {
     /// Create a new TuicConnectionProcessor.
     ///
     /// - `user_entries`: iterator of (Uuid, password)
