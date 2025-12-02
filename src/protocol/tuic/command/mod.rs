@@ -36,7 +36,7 @@ impl Command {
             .await
             .context("Failed to read header")?;
 
-        match header.command_type() {
+        match &header.command_type() {
             CommandType::Authenticate => Authenticate::read_from(header, &mut read)
                 .await
                 .map(Command::Authenticate)

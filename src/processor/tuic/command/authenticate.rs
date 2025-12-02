@@ -1,24 +1,35 @@
+use std::sync::Arc;
+
 use anyhow::{Result, bail};
 
+use async_trait::async_trait;
 use quinn::Connection;
 
 use crate::{
     authenticate::tuic::TuicAuthenticationManager,
-    protocol::tuic::command::authenticate::Authenticate,
+    processor::tuic::{CommandProcessor, context::RuntimeContext},
+    protocol::tuic::command::Command,
 };
 
 pub struct AuthenticateProcessor {
     authenticate_manager: TuicAuthenticationManager,
 }
 
-impl AuthenticateProcessor {
-    pub fn new(authenticate_manager: TuicAuthenticationManager) -> Self {
-        Self {
-            authenticate_manager,
-        }
-    }
+#[async_trait]
+impl CommandProcessor for AuthenticateProcessor {
+    async fn process(
+        &self,
+        context: Arc<RuntimeContext>,
+        connection: Connection,
+        command: Option<Command>,
+    ) -> Result<bool> {
+        let authenticate = match command {
+            Some(Command::Authenticate(authenticate)) => authenticate,
+            _ => {
+                bail!("This must not happen! command: {:?}", command)
+            }
+        };
 
-    pub fn verify(&self, authenticate: Authenticate, connection: Connection) -> Result<bool> {
         let password = match self.authenticate_manager.password(authenticate.uuid()) {
             Ok(value) => value,
             Err(_) => {
@@ -45,14 +56,26 @@ impl AuthenticateProcessor {
         }
 
         match authenticate.verify_token(&buff) {
-            Ok(true) => Ok(true),
+            Ok(true) => {
+                context.auth_done(true).await;
+                Ok(true)
+            }
             _ => {
+                context.auth_done(false).await;
                 bail!(
                     "Failed to verify client token! client: {}, uuid: {}",
                     &connection.remote_address(),
                     &authenticate.uuid()
                 )
             }
+        }
+    }
+}
+
+impl AuthenticateProcessor {
+    pub fn new(authenticate_manager: TuicAuthenticationManager) -> Self {
+        Self {
+            authenticate_manager,
         }
     }
 }

@@ -2,10 +2,14 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
+use async_trait::async_trait;
 use tokio::time::timeout;
 
+use crate::processor::tuic::CommandProcessor;
+use crate::processor::tuic::context::RuntimeContext;
 use crate::processor::tuic::udp_session_manager::{UdpFragment, UdpSessionManager};
 use crate::protocol::tuic::address::Address;
+use crate::protocol::tuic::command::Command;
 use crate::protocol::tuic::command::packet::Packet;
 use bytes::BytesMut;
 use quinn::Connection;
@@ -18,14 +22,23 @@ pub struct PacketProcessor {
     udp_session_manager: Arc<UdpSessionManager>,
 }
 
-impl PacketProcessor {
-    pub fn new(udp_session_manager: Arc<UdpSessionManager>) -> Self {
-        Self {
-            udp_session_manager,
-        }
-    }
+#[async_trait]
+impl CommandProcessor for PacketProcessor {
+    async fn process(
+        &self,
+        context: Arc<RuntimeContext>,
+        connection: Connection,
+        command: Option<Command>,
+    ) -> Result<bool> {
+        context.wait_for_auth().await;
 
-    pub async fn process(&self, connection: Connection, packet: Packet) -> Result<()> {
+        let packet = match command {
+            Some(Command::Packet(packet)) => packet,
+            _ => {
+                bail!("This must not happen! command: {:?}", command)
+            }
+        };
+
         let fragment = UdpFragment::from_packet(&packet);
 
         if let Some(reassembled) = &self
@@ -58,7 +71,15 @@ impl PacketProcessor {
             );
         }
 
-        Ok(())
+        Ok(true)
+    }
+}
+
+impl PacketProcessor {
+    pub fn new(udp_session_manager: Arc<UdpSessionManager>) -> Self {
+        Self {
+            udp_session_manager,
+        }
     }
 }
 

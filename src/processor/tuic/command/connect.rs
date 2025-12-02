@@ -1,79 +1,115 @@
 use anyhow::{Context as AnyhowContext, Result, bail};
-use quinn::{RecvStream, SendStream};
+use async_trait::async_trait;
+use quinn::Connection;
 use socket2::{Domain, Socket, TcpKeepalive, Type};
-use std::{net::SocketAddr, time::Duration};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio::{
     io::{self, AsyncWriteExt},
     net::TcpStream,
 };
 use tracing::debug;
 
-use crate::protocol::tuic::command::connect::Connect;
+use crate::{
+    processor::tuic::{CommandProcessor, context::RuntimeContext},
+    protocol::tuic::command::Command,
+};
 
 pub struct ConnectProcessor {}
+
+#[async_trait]
+impl CommandProcessor for ConnectProcessor {
+    async fn process(
+        &self,
+        context: Arc<RuntimeContext>,
+        connection: Connection,
+        command: Option<Command>,
+    ) -> Result<bool> {
+        context.wait_for_auth().await;
+
+        match command {
+            None => {}
+            _ => {
+                bail!("This must not happen! command: {:?}", command)
+            }
+        };
+
+        while let Ok((send, mut recv)) = connection.accept_bi().await {
+            let connection = connection.clone();
+
+            let connect = match Command::read_from(&mut recv).await {
+                Ok(Command::Connect(connect)) => connect,
+                _ => {
+                    bail!(
+                        "Faile to parse command from client: {}",
+                        &connection.remote_address()
+                    );
+                }
+            };
+
+            let exchange = async move {
+                let socket_addr = connect
+                    .address()
+                    .to_socket_address()
+                    .await
+                    .context(format!("Failed to resolve address {}", &connect.address()))?;
+
+                let tcp_stream = match connect_with_keepalive(
+                    socket_addr,
+                    Duration::from_secs(5),
+                    Duration::from_secs(2),
+                    1,
+                )
+                .await
+                {
+                    Ok(s) => s,
+                    Err(e) => {
+                        debug!("Failed to connect to {}, error:{}", &socket_addr, e);
+                        bail!("Failed to connect to {}, error:{}", &socket_addr, e);
+                    }
+                };
+
+                let (mut tcp_read, mut tcp_write) = tcp_stream.into_split();
+
+                let mut quic_recv = recv;
+                let mut quic_send = send;
+
+                let quic_to_tcp = async {
+                    let r = io::copy(&mut quic_recv, &mut tcp_write).await;
+                    let _ = tcp_write.shutdown().await;
+                    r
+                };
+
+                let tcp_to_quic = async {
+                    let r = io::copy(&mut tcp_read, &mut quic_send).await;
+                    let _ = quic_send.finish();
+                    r
+                };
+
+                tokio::select! {
+                    _ = quic_to_tcp => {
+                        let _ = quic_send.finish();
+                    }
+                    _ = tcp_to_quic => {
+                        let _ = tcp_write.shutdown().await;
+                    }
+                }
+
+                drop(tcp_write);
+                drop(tcp_read);
+
+                anyhow::Ok(())
+            };
+
+            let _ = tokio::spawn(async { exchange.await });
+        }
+
+        Ok(false)
+    }
+}
 
 impl ConnectProcessor {
     pub fn new() -> Self {
         Self {}
-    }
-
-    pub async fn process(
-        &self,
-        send: SendStream,
-        recv: RecvStream,
-        connect: Connect,
-    ) -> Result<()> {
-        let socket_addr = connect
-            .address()
-            .to_socket_address()
-            .await
-            .context(format!("Failed to resolve address {}", &connect.address()))?;
-
-        let tcp_stream = match connect_with_keepalive(
-            socket_addr,
-            Duration::from_secs(5),
-            Duration::from_secs(2),
-            1,
-        )
-        .await
-        {
-            Ok(s) => s,
-            Err(e) => {
-                debug!("Failed to connect to {}, error:{}", &socket_addr, e);
-                bail!("Failed to connect to {}, error:{}", &socket_addr, e);
-            }
-        };
-
-        let (mut tcp_read, mut tcp_write) = tcp_stream.into_split();
-
-        let mut quic_recv = recv;
-        let mut quic_send = send;
-
-        let quic_to_tcp = async {
-            let r = io::copy(&mut quic_recv, &mut tcp_write).await;
-            let _ = tcp_write.shutdown().await;
-            r
-        };
-
-        let tcp_to_quic = async {
-            let r = io::copy(&mut tcp_read, &mut quic_send).await;
-            let _ = quic_send.finish();
-            r
-        };
-
-        tokio::select! {
-            _ = quic_to_tcp => {
-                let _ = quic_send.finish();
-            }
-            _ = tcp_to_quic => {
-                let _ = tcp_write.shutdown().await;
-            }
-        }
-
-        drop(tcp_write);
-        drop(tcp_read);
-
-        Ok(())
     }
 }
 

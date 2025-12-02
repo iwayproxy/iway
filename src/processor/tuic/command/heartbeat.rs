@@ -1,22 +1,45 @@
-use anyhow::Result;
+use std::sync::Arc;
+
+use anyhow::{Result, bail};
+use async_trait::async_trait;
 use quinn::Connection;
 use tracing::debug;
 
-use crate::protocol::tuic::command::heartbeat::Heartbeat;
+use crate::{
+    processor::tuic::{CommandProcessor, context::RuntimeContext},
+    protocol::tuic::command::Command,
+};
 
 pub struct HeartbeatProcessor {}
 
-impl HeartbeatProcessor {
-    pub fn new() -> Self {
-        Self {}
-    }
+#[async_trait]
+impl CommandProcessor for HeartbeatProcessor {
+    async fn process(
+        &self,
+        context: Arc<RuntimeContext>,
+        connection: Connection,
+        command: Option<Command>,
+    ) -> Result<bool> {
+        context.wait_for_auth().await;
 
-    pub async fn process(&self, heartbeat: Heartbeat, connection: Connection) -> Result<()> {
+        let heartbeat = match command {
+            Some(Command::Heartbeat(heartbeat)) => heartbeat,
+            _ => {
+                bail!("This must not happen! command: {:?}", command)
+            }
+        };
+
         debug!(
             "Processing heartbeat : {:?} from {}",
             &heartbeat,
             &connection.remote_address()
         );
-        Ok(())
+        Ok(true)
+    }
+}
+
+impl HeartbeatProcessor {
+    pub fn new() -> Self {
+        Self {}
     }
 }

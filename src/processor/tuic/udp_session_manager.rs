@@ -189,20 +189,6 @@ impl UdpSessionManager {
         manager
     }
 
-    /// Set the maximum number of concurrent sessions. If None, no hard limit is enforced.
-    pub fn set_max_sessions(&self, max: Option<usize>) {
-        if let Ok(mut guard) = self.max_sessions.lock() {
-            *guard = max;
-        }
-    }
-
-    /// Set the maximum total reassembly bytes per session. If None, no per-session byte limit is enforced.
-    pub fn set_max_reassembly_bytes_per_session(&self, max: Option<usize>) {
-        if let Ok(mut guard) = self.max_reassembly_bytes_per_session.lock() {
-            *guard = max;
-        }
-    }
-
     pub fn receive_fragment(&self, frag: UdpFragment, client: SocketAddr) -> Option<Bytes> {
         let key = (client, frag.assoc_id);
         debug!(

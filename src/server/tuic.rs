@@ -6,7 +6,8 @@ use std::time::Duration;
 use std::{net::SocketAddr, path::Path, time::Instant};
 
 use crate::processor::tuic::TuicConnectionProcessor;
-use crate::processor::tuic::command::OneShotNotifier;
+use crate::processor::tuic::context::RuntimeContext;
+use crate::processor::tuic::notifier::OneShotNotifier;
 
 use super::{Server, ServerStatus};
 
@@ -22,7 +23,7 @@ use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls_pemfile::{certs, private_key};
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::sync::watch::Receiver;
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 
 fn load_certs(path: &Path) -> Result<Vec<CertificateDer<'static>>> {
     let file =
@@ -97,17 +98,7 @@ impl TuicServer {
             })
             .collect::<Vec<_>>();
 
-        // create processor with UDP session parameters from config
-        let udp_session_timeout = Duration::from_secs(config.udp_session_timeout());
-        let udp_cleanup_interval = Duration::from_secs(30); // keep existing default cleanup interval
-
-        let processor = Arc::new(TuicConnectionProcessor::new(
-            user_entries,
-            udp_session_timeout,
-            udp_cleanup_interval,
-            config.udp_max_sessions(),
-            config.udp_max_reassembly_bytes_per_session(),
-        ));
+        let processor = Arc::new(TuicConnectionProcessor::new(user_entries));
 
         Ok(Self {
             name: "TUIC v5",
@@ -268,54 +259,40 @@ impl Server for TuicServer {
                                 match incoming.accept() {
                                     Ok(connecting) => match connecting.await {
                                         Ok(connection) => {
-                                            info!("New connection connected (ID: {})", &connection.stable_id());
-                                            let notifier = Arc::new(OneShotNotifier::new());
+                                            let context = Arc::new(RuntimeContext::new(OneShotNotifier::new()));
 
-                                            let t_notifier = Arc::clone(&notifier);
+                                            debug!("New connection connected (ID: {})", &connection.stable_id());
+
                                             let recevied_processor = Arc::clone(&tuic_processor);
                                             let recevied_conn = connection.clone();
+                                            let recevied_context = Arc::clone(&context);
+
                                             let t_uni = tokio::spawn(async move {
                                                 let _ = recevied_processor
-                                                    .process_uni(recevied_conn, t_notifier)
+                                                    .process_uni(recevied_context, recevied_conn)
                                                     .await;
                                             });
 
-                                            //Waiting for authoration
-                                            let rx = Arc::clone(&notifier);
-                                            match rx.wait().await {
-                                                Some(state) => {
-                                                    if state {
-                                                        debug!("Authorized client: {} !", &connection.remote_address());
-                                                    } else {
-                                                        error!("Failed to authorize client: {}", &connection.remote_address());
-                                                        return;
-                                                    }
-                                                },
-                                                None => {
-                                                    error!("Failed to authorize client: {}, timeout!", &connection.remote_address());
-                                                    return;
-                                                },
-                                            }
-
                                             let bidirectional_processor = Arc::clone(&tuic_processor);
                                             let bidirection_conn = connection.clone();
+                                            let bidiraction_context = Arc::clone(&context);
                                             let t_bid = tokio::spawn(async move {
                                                  let _ = bidirectional_processor
-                                                                    .process_bidirectional(bidirection_conn)
+                                                                    .process_bidirectional(bidiraction_context, bidirection_conn)
                                                                     .await;
                                             });
 
                                             let datagram_processor = Arc::clone(&tuic_processor);
                                             let datagram_conn = connection.clone();
+                                            let datagram_ontext = Arc::clone(&context);
                                             let t_dat = tokio::spawn(async move {
                                                 let _ = datagram_processor
-                                                                .process_datagram(datagram_conn)
+                                                                .process_datagram(datagram_ontext, datagram_conn)
                                                                 .await;
                                             });
 
                                             let _ = tokio::join!(t_uni, t_bid, t_dat);
-                                            debug!("Connection with {} has finished!", &connection.remote_address());
-                                            info!("The connection (ID:{}) was closed!", &connection.stable_id());
+                                            debug!("The connection (ID:{}) was closed!", &connection.stable_id());
                                         }
                                         Err(e) => {
                                             debug!("Connecting await failed: {}", e);
