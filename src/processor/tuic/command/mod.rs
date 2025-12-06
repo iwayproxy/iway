@@ -9,7 +9,6 @@ use std::sync::Arc;
 use anyhow::{Result, bail};
 use async_trait::async_trait;
 use quinn::Connection;
-use tokio::time::Duration;
 
 use crate::authenticate::tuic::TuicAuthenticationManager;
 use crate::processor::tuic::CommandProcessor;
@@ -19,7 +18,6 @@ use crate::processor::tuic::command::dissociate::DissociateProcess;
 use crate::processor::tuic::command::heartbeat::HeartbeatProcessor;
 use crate::processor::tuic::command::packet::PacketProcessor;
 use crate::processor::tuic::context::RuntimeContext;
-use crate::processor::tuic::udp_session_manager::UdpSessionManager;
 use crate::protocol::tuic::command::Command;
 
 pub struct CommandUniprocessor {
@@ -32,20 +30,15 @@ pub struct CommandUniprocessor {
 
 impl CommandUniprocessor {
     pub fn new(authentication_manager: TuicAuthenticationManager) -> Self {
-        //concrete command processors
         let authenticate_processor = Arc::new(AuthenticateProcessor::new(authentication_manager));
 
-        let connect_processor = Arc::new(ConnectProcessor::new());
+        let connect_processor = Arc::new(ConnectProcessor {});
 
-        let heartbeat_processor = Arc::new(HeartbeatProcessor::new());
+        let heartbeat_processor = Arc::new(HeartbeatProcessor {});
 
-        let udp_session_manager =
-            UdpSessionManager::new(Duration::from_secs(300), Duration::from_secs(10));
+        let packet_processor = Arc::new(PacketProcessor {});
 
-        let packet_processor = Arc::new(PacketProcessor::new(Arc::clone(&udp_session_manager)));
-
-        let dissociate_processor =
-            Arc::new(DissociateProcess::new(Arc::clone(&udp_session_manager)));
+        let dissociate_processor = Arc::new(DissociateProcess {});
 
         Self {
             authenticate_processor,
@@ -68,6 +61,7 @@ impl CommandProcessor for CommandUniprocessor {
         let command = match command {
             Some(command) => command,
             None => {
+                //magic value for command Connect
                 self.connect_processor
                     .process(context, connection, None)
                     .await?;

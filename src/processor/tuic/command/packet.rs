@@ -1,26 +1,17 @@
 use std::sync::Arc;
-use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
-use tokio::time::timeout;
+use bytes::BytesMut;
 
 use crate::processor::tuic::CommandProcessor;
 use crate::processor::tuic::context::RuntimeContext;
-use crate::processor::tuic::udp_session_manager::{UdpFragment, UdpSessionManager};
-use crate::protocol::tuic::address::Address;
 use crate::protocol::tuic::command::Command;
 use crate::protocol::tuic::command::packet::Packet;
-use bytes::BytesMut;
 use quinn::Connection;
-use tokio::net::UdpSocket;
-use tracing::debug;
+use tracing::{debug, error};
 
-const UDP_BUFFER_SIZE: usize = 2048;
-
-pub struct PacketProcessor {
-    udp_session_manager: Arc<UdpSessionManager>,
-}
+pub struct PacketProcessor {}
 
 #[async_trait]
 impl CommandProcessor for PacketProcessor {
@@ -39,98 +30,118 @@ impl CommandProcessor for PacketProcessor {
             }
         };
 
-        let fragment = UdpFragment::from_packet(&packet);
+        let context = context.clone();
 
-        if let Some(reassembled) = &self
-            .udp_session_manager
-            .receive_fragment(fragment, connection.remote_address())
-        {
-            let response = send_and_receive(&packet.address, &reassembled)
-                .await
-                .context("Failed to send and receive UDP packet")?;
+        match packet.only_one_frag() {
+            true => {
+                let session = context.get_session(packet.assoc_id);
 
-            let assoc_id = packet.assoc_id;
-            let pkt_id = packet.pkt_id;
-            let packets = Packet::get_packets_from(&response, assoc_id, pkt_id, &packet.address);
-            if packets.is_empty() {
-                bail!("No data packet is present at the moment.");
-            }
+                //send data to server
+                let Some(remote_addr) = packet.address.to_socket_address().await else {
+                    bail!("Failed to resolve address");
+                };
 
-            for packet in packets {
-                let mut bytes = BytesMut::with_capacity(UDP_BUFFER_SIZE);
-                packet.write_to_buf(&mut bytes);
-                connection.send_datagram(bytes.freeze()).context(format!(
-                    "Failed to send data to client: {}",
-                    &connection.remote_address()
-                ))?;
-            }
-            debug!(
-                "✅ Successfully processed UDP packet, dest: {} size: {}",
-                &packet.address,
-                &response.len()
-            );
-        }
+                let response_buf = session.send_and_recv(remote_addr, &packet.payload).await?;
 
-        Ok(true)
-    }
-}
+                debug!(
+                    "associate(ID:{}) packet(ID: {}) sent and recv {} bytes",
+                    &packet.assoc_id,
+                    &packet.pkt_id,
+                    response_buf.len()
+                );
 
-impl PacketProcessor {
-    pub fn new(udp_session_manager: Arc<UdpSessionManager>) -> Self {
-        Self {
-            udp_session_manager,
-        }
-    }
-}
+                let packets = Packet::get_packets_from(
+                    &response_buf,
+                    packet.assoc_id,
+                    packet.pkt_id,
+                    &packet.address,
+                );
 
-async fn send_and_receive(dest: &Address, data: &[u8]) -> Result<Vec<u8>> {
-    let Some(dest_socket_addr) = dest.to_socket_address().await else {
-        bail!("Failed to resolve address to dest socket address {}", dest);
-    };
-
-    let bind_addr = match dest_socket_addr {
-        std::net::SocketAddr::V4(_) => "0.0.0.0:0",
-        std::net::SocketAddr::V6(_) => "[::]:0",
-    };
-
-    let socket = UdpSocket::bind(bind_addr).await?;
-
-    let sent = socket.send_to(data, dest_socket_addr).await?;
-    debug!("Has sent {} data to {}", sent, &dest_socket_addr);
-
-    let mut all_packets = Vec::new();
-    let mut buf = vec![0u8; 4 * 1024];
-    let mut consecutive_timeouts = 0usize;
-
-    loop {
-        let n = {
-            match timeout(Duration::from_millis(200), socket.recv_from(&mut buf)).await {
-                Ok(Ok((n, _addr))) => {
-                    consecutive_timeouts = 0;
-                    Some(n)
+                for packet in packets {
+                    let mut bytes = BytesMut::with_capacity(1500);
+                    packet.write_to_buf(&mut bytes);
+                    connection.send_datagram(bytes.freeze()).context(format!(
+                        "Failed to send data to client: {}",
+                        &connection.remote_address()
+                    ))?;
                 }
-                Ok(Err(e)) => {
-                    debug!("Error while receiving from socket: {}", e);
-                    None
-                }
-                Err(_) => {
-                    consecutive_timeouts += 1;
-                    if consecutive_timeouts >= 3 {
-                        debug!("No more data after 3 consecutive timeouts");
-                        break;
+
+                debug!(
+                    "✅ Successfully processed UDP packet, dest: {} size: {}",
+                    &packet.address,
+                    response_buf.len()
+                );
+
+                Ok(true)
+            }
+            false => {
+                // Multi-fragment packet — reassemble first
+                let session = context.get_session(packet.assoc_id);
+                let assoc_id = packet.assoc_id;
+                let pkt_id = packet.pkt_id;
+                let address = packet.address.clone();
+
+                // Store this fragment and check if packet is complete
+                if let Some(completed_pkt_id) = session.accept(packet) {
+                    // All fragments received, get assembled payload
+                    if let Some(assembled_payload) =
+                        session.take_fragmented_packet(completed_pkt_id)
+                    {
+                        let Some(remote_addr) = address.to_socket_address().await else {
+                            error!("Found packet with address None, this must be improved!");
+                            bail!("Failed to resolve address");
+                        };
+
+                        // Send assembled data to server and recv response
+                        match session.send_and_recv(remote_addr, &assembled_payload).await {
+                            Ok(response_buf) => {
+                                let recv_n = response_buf.len();
+                                debug!(
+                                    "associate(ID:{}) fragmented packet(ID: {}) sent and recv {} bytes from {}",
+                                    assoc_id, completed_pkt_id, recv_n, &address
+                                );
+
+                                // Send response back to client
+                                let response_packets = Packet::get_packets_from(
+                                    &response_buf,
+                                    assoc_id,
+                                    completed_pkt_id,
+                                    &address,
+                                );
+
+                                for resp_packet in response_packets {
+                                    let mut bytes = BytesMut::with_capacity(1500);
+                                    resp_packet.write_to_buf(&mut bytes);
+                                    connection.send_datagram(bytes.freeze()).context(format!(
+                                        "Failed to send data to client: {}",
+                                        &connection.remote_address()
+                                    ))?;
+                                }
+
+                                debug!(
+                                    "✅ Successfully processed fragmented UDP packet, dest: {} size: {}",
+                                    &address, recv_n
+                                );
+                            }
+                            Err(e) => {
+                                debug!(
+                                    "Failed to send/recv fragmented packet for associate(ID:{}): {}",
+                                    assoc_id, e
+                                );
+                                return Ok(true);
+                            }
+                        }
                     }
-                    None
+                } else {
+                    // Still waiting for more fragments
+                    debug!(
+                        "associate(ID:{}) packet(ID: {}) received fragment, waiting for more",
+                        assoc_id, pkt_id
+                    );
                 }
-            }
-        };
 
-        match n {
-            Some(n) => {
-                all_packets.extend_from_slice(&buf[..n]);
+                Ok(true)
             }
-            None => {}
         }
     }
-
-    Ok(all_packets)
 }

@@ -37,9 +37,3 @@ impl CommandProcessor for HeartbeatProcessor {
         Ok(true)
     }
 }
-
-impl HeartbeatProcessor {
-    pub fn new() -> Self {
-        Self {}
-    }
-}

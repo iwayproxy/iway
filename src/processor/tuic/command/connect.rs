@@ -107,12 +107,6 @@ impl CommandProcessor for ConnectProcessor {
     }
 }
 
-impl ConnectProcessor {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
 pub async fn connect_with_keepalive(
     addr: SocketAddr,
     keepalive_idle: Duration,

@@ -33,6 +33,7 @@ zeroize = { version = "1.6", features = ["derive"] }
 # constant-time comparison to prevent timing attacks
 subtle = "2.5"
 zerocopy = { version = "0.8.31", features = ["derive"] }
+parking_lot = "0.12.5"
 
 [profile.release]
 opt-level = 3

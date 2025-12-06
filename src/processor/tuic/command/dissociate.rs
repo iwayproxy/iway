@@ -6,15 +6,11 @@ use tracing::debug;
 use anyhow::{Result, bail};
 
 use crate::{
-    processor::tuic::{
-        CommandProcessor, context::RuntimeContext, udp_session_manager::UdpSessionManager,
-    },
+    processor::tuic::{CommandProcessor, context::RuntimeContext},
     protocol::tuic::command::Command,
 };
 
-pub struct DissociateProcess {
-    udp_session_manager: Arc<UdpSessionManager>,
-}
+pub struct DissociateProcess {}
 
 #[async_trait]
 impl CommandProcessor for DissociateProcess {
@@ -36,20 +32,10 @@ impl CommandProcessor for DissociateProcess {
         debug!(
             "Processing dissociate : {:?} from {}",
             &dissociate,
-            &dissociate.assoc_id()
+            &connection.remote_address()
         );
 
-        self.udp_session_manager
-            .remove_session((&connection).remote_address(), (&dissociate).assoc_id());
-
+        let _ = context.remove_session(dissociate.assoc_id());
         Ok(true)
-    }
-}
-
-impl DissociateProcess {
-    pub fn new(udp_session_manager: Arc<UdpSessionManager>) -> Self {
-        Self {
-            udp_session_manager,
-        }
     }
 }

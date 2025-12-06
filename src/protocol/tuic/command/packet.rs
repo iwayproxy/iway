@@ -103,6 +103,10 @@ impl Packet {
             payload,
         })
     }
+
+    pub fn only_one_frag(&self) -> bool {
+        1 == self.frag_total
+    }
 }
 
 impl Display for Packet {

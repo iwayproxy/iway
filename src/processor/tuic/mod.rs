@@ -1,8 +1,8 @@
 pub mod command;
-pub mod udp_session_manager;
 
 pub mod context;
 pub mod notifier;
+pub mod session;
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -68,13 +68,12 @@ impl TuicConnectionProcessor {
         context: Arc<RuntimeContext>,
         connection: Connection,
     ) -> Result<()> {
-        if let Err(e) = self
-            .command_processor
-            .process(context, connection, None)
-            .await
-        {
-            debug!("Failed to process Connect command: {}", e);
-        }
+        let command_processor = self.command_processor.clone();
+        tokio::spawn(async move {
+            if let Err(e) = command_processor.process(context, connection, None).await {
+                debug!("Failed to process Connect command: {}", e);
+            }
+        });
 
         Ok(())
     }
