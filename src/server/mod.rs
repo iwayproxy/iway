@@ -40,7 +40,11 @@ impl ServerManager {
             }
         };
 
-        servers.insert("Tuic".to_string(), Arc::new(Mutex::new(tuic_server)));
+        const TUIC_SERVER_NAME: &str = "Tuic";
+        servers.insert(
+            TUIC_SERVER_NAME.to_string(),
+            Arc::new(Mutex::new(tuic_server)),
+        );
 
         Self { servers }
     }

@@ -106,7 +106,7 @@ impl TuicConnectionProcessor {
 
     pub fn new<I>(user_entries: I) -> Self
     where
-        I: IntoIterator<Item = (Uuid, String)>,
+        I: IntoIterator<Item = (Uuid, Arc<[u8]>)>,
     {
         let authentication_manager = TuicAuthenticationManager::new(user_entries);
 

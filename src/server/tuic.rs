@@ -94,7 +94,7 @@ impl TuicServer {
             .filter_map(|u| {
                 uuid::Uuid::parse_str(&u.uuid())
                     .ok()
-                    .map(|id| (id, u.password().to_string()))
+                    .map(|id| (id, Arc::from(u.password().as_bytes())))
             })
             .collect::<Vec<_>>();
 

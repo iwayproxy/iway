@@ -40,14 +40,19 @@ pub struct Config {
     users: Vec<UserConfig>,
 }
 
+// Default configuration values as constants to avoid repeated allocations
+const DEFAULT_SERVER_ADDR: &str = "[::]:443";
+const DEFAULT_CERT_PATH: &str = "server.crt";
+const DEFAULT_KEY_PATH: &str = "server.key";
+
 impl Default for Config {
     fn default() -> Self {
         Self {
-            server_addr: "[::]:443".to_string(),
+            server_addr: DEFAULT_SERVER_ADDR.to_string(),
             udp_session_timeout: 30,
             udp_socket_timeout: 10,
-            cert_path: "server.crt".to_string(),
-            key_path: "server.key".to_string(),
+            cert_path: DEFAULT_CERT_PATH.to_string(),
+            key_path: DEFAULT_KEY_PATH.to_string(),
             udp_max_sessions: None,
             udp_max_reassembly_bytes_per_session: None,
             users: vec![],

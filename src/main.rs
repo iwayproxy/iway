@@ -117,7 +117,7 @@ async fn async_main() -> Result<(), String> {
         ),
         Err(e) => {
             error!("Failed to initialize servers: {}", e);
-            return Err("Failed to initialize servers!".to_string());
+            return Err("Failed to initialize servers!".into());
         }
     }
 
@@ -128,7 +128,7 @@ async fn async_main() -> Result<(), String> {
         ),
         Err(e) => {
             error!("Failed to start servers: {}", e);
-            return Err("Failed to start servers!".to_string());
+            return Err("Failed to start servers!".into());
         }
     }
 

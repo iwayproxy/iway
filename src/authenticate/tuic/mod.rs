@@ -12,13 +12,12 @@ pub struct TuicAuthenticationManager {
 impl TuicAuthenticationManager {
     pub fn new<I>(user_entries: I) -> Self
     where
-        I: IntoIterator<Item = (Uuid, String)>,
+        I: IntoIterator<Item = (Uuid, Arc<[u8]>)>,
     {
         let users: Arc<DashMap<Uuid, Arc<[u8]>>> = Arc::new(DashMap::new());
 
-        for (uuid, password) in user_entries {
-            let arc_bytes: Arc<[u8]> = Arc::from(password.into_bytes().into_boxed_slice());
-            users.insert(uuid, arc_bytes);
+        for (uuid, password_bytes) in user_entries {
+            users.insert(uuid, password_bytes);
         }
 
         TuicAuthenticationManager { users }
