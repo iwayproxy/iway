@@ -87,11 +87,13 @@ impl Address {
                 cache.put_u8(address_type as u8);
                 cache.put_u8(len);
 
-                let mut domain_bytes = vec![0u8; len as usize];
-                read.read_exact(&mut domain_bytes).await?;
-                cache.put_slice(&domain_bytes);
+                // Zero-copy: read directly into BytesMut then convert
+                let mut domain_buf = BytesMut::with_capacity(len as usize);
+                domain_buf.resize(len as usize, 0);
+                read.read_exact(&mut domain_buf).await?;
 
-                let address = String::from_utf8(domain_bytes)?;
+                let address = String::from_utf8(domain_buf.to_vec())?;
+                cache.put_slice(&domain_buf);
 
                 let port = read.read_u16().await?;
                 cache.put_u16(port);

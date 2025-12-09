@@ -33,7 +33,8 @@ impl UdpSession {
     }
 
     pub fn get_address(&self) -> Option<Address> {
-        self.inner.address.read().clone()
+        // Avoid unnecessary clone for Address comparison
+        self.inner.address.read().as_ref().cloned()
     }
 
     pub fn set_address(&self, addr: Address) {
@@ -121,13 +122,28 @@ impl UdpSession {
         let mut packets = self.inner.pakets.write();
 
         if let Some(frag_pkt) = packets.remove(&pkt_id) {
+            // Edge case: no fragments received (should not happen in normal flow)
+            if frag_pkt.received.is_empty() {
+                return None;
+            }
+
+            // Optimization: if only one fragment, return it directly (zero-copy)
+            if frag_pkt.received.len() == 1 {
+                if let Some(bytes) = frag_pkt.received.into_iter().next().unwrap() {
+                    return Some(bytes);
+                }
+                return None;
+            }
+
+            // Multi-fragment case: calculate total size first to pre-allocate buffer
+            // This avoids BytesMut re-allocations during extend_from_slice
             let total_size: usize = frag_pkt
                 .received
                 .iter()
                 .filter_map(|b| b.as_ref().map(|x| x.len()))
                 .sum();
-            let mut assembled = BytesMut::with_capacity(total_size);
 
+            let mut assembled = BytesMut::with_capacity(total_size);
             for opt_bytes in frag_pkt.received {
                 if let Some(bytes) = opt_bytes {
                     assembled.extend_from_slice(&bytes);

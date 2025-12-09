@@ -74,13 +74,13 @@ impl CommandProcessor for ConnectProcessor {
                 let mut quic_send = send;
 
                 let quic_to_tcp = async {
-                    let r = copy_with_buf(&mut quic_recv, &mut tcp_write, 512 * 1024).await;
+                    let r = copy_with_buf(&mut quic_recv, &mut tcp_write, 16 * 1024).await;
                     let _ = tcp_write.shutdown().await;
                     r
                 };
 
                 let tcp_to_quic = async {
-                    let r = copy_with_buf(&mut tcp_read, &mut quic_send, 512 * 1024).await;
+                    let r = copy_with_buf(&mut tcp_read, &mut quic_send, 16 * 1024).await;
                     let _ = quic_send.finish();
                     r
                 };
@@ -152,16 +152,19 @@ where
     R: AsyncReadExt + Unpin,
     W: AsyncWriteExt + Unpin,
 {
-    let mut buf = vec![0u8; buf_size];
+    // Use BytesMut from bytes crate for better memory efficiency
+    let mut buf = bytes::BytesMut::with_capacity(buf_size);
     let mut total = 0;
 
     loop {
-        let n = reader.read(&mut buf).await?;
+        // Read into BytesMut instead of Vec for potential zero-copy benefits
+        let n = reader.read_buf(&mut buf).await?;
         if n == 0 {
             break;
         }
 
-        writer.write_all(&buf[..n]).await?;
+        writer.write_all(&buf).await?;
+        buf.clear();
         total += n as u64;
     }
 

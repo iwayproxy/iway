@@ -90,11 +90,12 @@ impl Packet {
             .context("Failed to read size from stream")?;
         let address = Address::read_from(r).await?;
 
-        let mut payload_vec = vec![0u8; size as usize];
-        r.read_exact(&mut payload_vec)
+        let mut payload_buf = BytesMut::with_capacity(size as usize);
+        payload_buf.resize(size as usize, 0);
+        r.read_exact(&mut payload_buf)
             .await
             .context("Failed to read payload from stream")?;
-        let payload = Bytes::from(payload_vec);
+        let payload = payload_buf.freeze();
 
         Ok(Self {
             header,
@@ -110,6 +111,20 @@ impl Packet {
 
     pub fn only_one_frag(&self) -> bool {
         1 == self.frag_total
+    }
+
+    /// Estimate the serialized size of this packet to avoid over-allocation
+    ///
+    /// Calculates: Version(1) + CommandType(1) + AssocID(2) + PktID(2)
+    /// + FragTotal(1) + FragID(1) + Size(2) + Address(variable) + Payload
+    pub fn estimate_size(&self) -> usize {
+        let base_size = 10; // Fixed header fields
+        let addr_size = match &self.address {
+            Address::SocketAddress(_, cache) => cache.len(),
+            Address::DomainAddress(_, _, cache) => cache.len(),
+            Address::None => 1,
+        };
+        base_size + addr_size + self.payload.len()
     }
 }
 

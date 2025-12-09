@@ -50,15 +50,17 @@ impl CommandProcessor for PacketProcessor {
                     response_buf.len()
                 );
 
-                let packets = Packet::get_packets_from(
+                let response_packets = Packet::get_packets_from(
                     &response_buf,
                     packet.assoc_id,
                     packet.pkt_id,
                     &packet.address,
                 );
 
-                for packet in packets {
-                    let mut bytes = BytesMut::with_capacity(1500);
+                for packet in response_packets {
+                    // Pre-calculate packet size to avoid buffer reallocation
+                    let packet_size = packet.estimate_size();
+                    let mut bytes = BytesMut::with_capacity(packet_size);
                     packet.write_to_buf(&mut bytes);
                     connection.send_datagram(bytes.freeze()).context(format!(
                         "Failed to send data to client: {}",
@@ -118,7 +120,8 @@ impl CommandProcessor for PacketProcessor {
                                 );
 
                                 for resp_packet in response_packets {
-                                    let mut bytes = BytesMut::with_capacity(1500);
+                                    let packet_size = resp_packet.estimate_size();
+                                    let mut bytes = BytesMut::with_capacity(packet_size);
                                     resp_packet.write_to_buf(&mut bytes);
                                     connection.send_datagram(bytes.freeze()).context(format!(
                                         "Failed to send data to client: {}",
