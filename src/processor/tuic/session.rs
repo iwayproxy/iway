@@ -57,16 +57,28 @@ impl UdpSession {
         // Send data
         socket.send_to(data, remote_addr).await?;
 
-        // Receive response with timeout
-        let mut buf = vec![0u8; 65535];
-        let (n, _) = tokio::time::timeout(
-            std::time::Duration::from_secs(3),
-            socket.recv_from(&mut buf),
-        )
-        .await??;
+        // Receive response with timeout - use optimized buffer size
+        // Start with typical MTU size (4096) to avoid massive allocation
+        // Most UDP responses fit within this size
+        let mut buf = vec![0u8; 4096]; // Start with 4KB instead of 65KB
 
-        buf.truncate(n);
-        Ok(buf)
+        // Retry with larger buffer if needed (rare case)
+        loop {
+            let (n, _) = tokio::time::timeout(
+                std::time::Duration::from_secs(3),
+                socket.recv_from(&mut buf),
+            )
+            .await??;
+
+            // Check if buffer was too small (would require expansion)
+            if n == buf.len() && buf.len() < 65535 {
+                buf.resize(buf.len() * 2, 0);
+                continue; // Retry with larger buffer
+            }
+
+            buf.truncate(n);
+            return Ok(buf);
+        }
     }
 
     pub async fn close_socket(&self) {
@@ -77,6 +89,7 @@ impl UdpSession {
     pub fn accept(&self, packet: Packet) -> Option<u16> {
         // Single fragment never goes here
         // Store address from first fragment (if not None)
+        // Only clone address when needed (avoid unnecessary clone for None)
         if !matches!(packet.address, Address::None) {
             self.set_address(packet.address.clone());
         }

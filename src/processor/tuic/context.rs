@@ -27,17 +27,10 @@ impl RuntimeContext {
     }
 
     pub fn get_session(&self, associate_id: u16) -> UdpSession {
-        let r = self.udp_sessions.get_mut(&associate_id);
-        match r {
-            Some(session) => session.clone(),
-            None => {
-                let session = UdpSession::new();
-                let reval = session.clone();
-
-                self.udp_sessions.insert(associate_id, session);
-                reval
-            }
-        }
+        self.udp_sessions
+            .entry(associate_id)
+            .or_insert_with(UdpSession::new)
+            .clone()
     }
 
     pub async fn remove_session(&self, associate_id: u16) {
