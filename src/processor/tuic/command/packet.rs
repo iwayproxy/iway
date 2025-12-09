@@ -79,7 +79,6 @@ impl CommandProcessor for PacketProcessor {
                 let session = context.get_session(packet.assoc_id);
                 let assoc_id = packet.assoc_id;
                 let pkt_id = packet.pkt_id;
-                let address = packet.address.clone();
 
                 // Store this fragment and check if packet is complete
                 if let Some(completed_pkt_id) = session.accept(packet) {
@@ -87,8 +86,17 @@ impl CommandProcessor for PacketProcessor {
                     if let Some(assembled_payload) =
                         session.take_fragmented_packet(completed_pkt_id)
                     {
+                        // Get address from session (saved when first fragment arrived)
+                        let Some(address) = session.get_address() else {
+                            error!(
+                                "No address stored in session for associate_id: {}",
+                                assoc_id
+                            );
+                            return Ok(true);
+                        };
+
                         let Some(remote_addr) = address.to_socket_address().await else {
-                            error!("Found packet with address None, this must be improved!");
+                            error!("Failed to resolve address: {:?}", address);
                             bail!("Failed to resolve address");
                         };
 

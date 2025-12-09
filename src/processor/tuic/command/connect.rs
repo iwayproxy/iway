@@ -4,7 +4,7 @@ use quinn::Connection;
 use socket2::{Domain, Socket, TcpKeepalive, Type};
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio::{
-    io::{self, AsyncWriteExt},
+    io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
 };
 use tracing::debug;
@@ -74,13 +74,13 @@ impl CommandProcessor for ConnectProcessor {
                 let mut quic_send = send;
 
                 let quic_to_tcp = async {
-                    let r = io::copy(&mut quic_recv, &mut tcp_write).await;
+                    let r = copy_with_buf(&mut quic_recv, &mut tcp_write, 512 * 1024).await;
                     let _ = tcp_write.shutdown().await;
                     r
                 };
 
                 let tcp_to_quic = async {
-                    let r = io::copy(&mut tcp_read, &mut quic_send).await;
+                    let r = copy_with_buf(&mut tcp_read, &mut quic_send, 512 * 1024).await;
                     let _ = quic_send.finish();
                     r
                 };
@@ -141,4 +141,29 @@ pub async fn connect_with_keepalive(
         None => Ok(stream),
         Some(e) => Err(anyhow::Error::new(e).context("Async connect failed")),
     }
+}
+
+pub async fn copy_with_buf<R, W>(
+    mut reader: R,
+    mut writer: W,
+    buf_size: usize,
+) -> std::io::Result<u64>
+where
+    R: AsyncReadExt + Unpin,
+    W: AsyncWriteExt + Unpin,
+{
+    let mut buf = vec![0u8; buf_size];
+    let mut total = 0;
+
+    loop {
+        let n = reader.read(&mut buf).await?;
+        if n == 0 {
+            break;
+        }
+
+        writer.write_all(&buf[..n]).await?;
+        total += n as u64;
+    }
+
+    Ok(total)
 }

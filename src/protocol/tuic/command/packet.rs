@@ -41,7 +41,11 @@ impl Packet {
                 frag_total,
                 frag_id: frag_id as u8,
                 size: chunk.len() as u16,
-                address: address.clone(),
+                address: if 0 < frag_id {
+                    Address::None
+                } else {
+                    address.clone()
+                },
                 payload: BytesMut::from(chunk).freeze(),
             });
         }

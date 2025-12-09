@@ -4,7 +4,7 @@ use bytes::{Bytes, BytesMut};
 use parking_lot::RwLock;
 use tokio::net::UdpSocket;
 
-use crate::protocol::tuic::command::packet::Packet;
+use crate::protocol::tuic::{address::Address, command::packet::Packet};
 
 #[derive(Clone)]
 pub struct UdpSession {
@@ -13,6 +13,7 @@ pub struct UdpSession {
 
 pub struct UdpSessionInner {
     pakets: RwLock<HashMap<u16, FragmentedPacket>>,
+    address: RwLock<Option<Address>>,
 }
 
 pub struct FragmentedPacket {
@@ -26,8 +27,17 @@ impl UdpSession {
         Self {
             inner: Arc::new(UdpSessionInner {
                 pakets: RwLock::new(HashMap::new()),
+                address: RwLock::new(None),
             }),
         }
+    }
+
+    pub fn get_address(&self) -> Option<Address> {
+        self.inner.address.read().clone()
+    }
+
+    pub fn set_address(&self, addr: Address) {
+        *self.inner.address.write() = Some(addr);
     }
 
     pub async fn send_and_recv(
@@ -65,22 +75,22 @@ impl UdpSession {
 
     pub fn accept(&self, packet: Packet) -> Option<u16> {
         // Single fragment never goes here
+        // Store address from first fragment (if not None)
+        if !matches!(packet.address, Address::None) {
+            self.set_address(packet.address.clone());
+        }
+
         let mut packets = self.inner.pakets.write();
 
         match packets.get_mut(&packet.pkt_id) {
             Some(frag_pkt) => {
-                // Packet already exists — mark this fragment as received
-                if (packet.frag_id as usize) < frag_pkt.received.len() {
-                    let bit = 1u128 << packet.frag_id;
+                let bit = 1u128 << packet.frag_id;
 
-                    // Only store if not already received
-                    if (frag_pkt.received_bitmap & bit) == 0 {
-                        frag_pkt.received[packet.frag_id as usize] = Some(packet.payload);
-                        frag_pkt.received_bitmap |= bit;
-                    }
+                if (frag_pkt.received_bitmap & bit) == 0 {
+                    frag_pkt.received[packet.frag_id as usize] = Some(packet.payload);
+                    frag_pkt.received_bitmap |= bit;
                 }
 
-                // Check if all fragments received using bitmap
                 if frag_pkt.received_bitmap.count_ones() as u8 == frag_pkt.fragment_count {
                     return Some(packet.pkt_id);
                 }
@@ -88,7 +98,6 @@ impl UdpSession {
                 None
             }
             None => {
-                // New fragmented packet — create entry
                 let mut received = vec![None; packet.frag_total as usize];
                 received[packet.frag_id as usize] = Some(packet.payload);
 
@@ -110,9 +119,15 @@ impl UdpSession {
 
     pub fn take_fragmented_packet(&self, pkt_id: u16) -> Option<Bytes> {
         let mut packets = self.inner.pakets.write();
+
         if let Some(frag_pkt) = packets.remove(&pkt_id) {
-            // Assemble all fragments into one payload
-            let mut assembled = BytesMut::new();
+            let total_size: usize = frag_pkt
+                .received
+                .iter()
+                .filter_map(|b| b.as_ref().map(|x| x.len()))
+                .sum();
+            let mut assembled = BytesMut::with_capacity(total_size);
+
             for opt_bytes in frag_pkt.received {
                 if let Some(bytes) = opt_bytes {
                     assembled.extend_from_slice(&bytes);

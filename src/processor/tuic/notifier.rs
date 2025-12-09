@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use tokio::{sync::watch, time::timeout};
-use tracing::error;
+use tracing::{debug, error};
 
 pub struct OneShotNotifier {
     tx: watch::Sender<Option<bool>>,
@@ -59,7 +59,7 @@ impl OneShotNotifier {
         match timeout(dur, fut).await {
             Ok(r) => r,
             Err(e) => {
-                error! {"This should not happen, there must be something wrong! error: {e}"}
+                debug!("This should not happen, there must be something wrong! error: {e}");
                 None
             }
         }
