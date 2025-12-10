@@ -27,6 +27,13 @@ impl RuntimeContext {
     }
 
     pub fn get_session(&self, associate_id: u16) -> UdpSession {
+        // Fast path: try direct get first (cache-friendly for existing sessions)
+        // This avoids the full entry API cost for the common case
+        if let Some(session) = self.udp_sessions.get(&associate_id) {
+            return session.clone();
+        }
+
+        // Slow path: only create new session if it doesn't exist
         self.udp_sessions
             .entry(associate_id)
             .or_insert_with(UdpSession::new)

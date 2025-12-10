@@ -24,9 +24,9 @@ impl TuicAuthenticationManager {
     }
 
     pub fn password(&self, uuid: &Uuid) -> Result<Arc<[u8]>> {
-        match self.users.get(uuid) {
-            Some(value) => Ok(value.clone()),
-            None => Err(anyhow!("Illegal UUID {} trys to access the server.", &uuid)),
-        }
+        self.users
+            .get(uuid)
+            .map(|value| Arc::clone(&*value))
+            .ok_or_else(|| anyhow!("Illegal UUID {} trys to access the server.", &uuid))
     }
 }
