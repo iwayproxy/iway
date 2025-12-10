@@ -46,16 +46,20 @@ impl RuntimeContext {
             Some((_associate_id, session)) => {
                 // Close UDP socket before removing session
                 session.close_socket().await;
-                debug!(
-                    "Success to remove all sessions with associate_id : {}",
-                    &associate_id
-                );
+                if tracing::enabled!(tracing::Level::DEBUG) {
+                    debug!(
+                        "Success to remove all sessions with associate_id : {}",
+                        &associate_id
+                    );
+                }
             }
             None => {
-                debug!(
-                    "Failed to remove session: no such associate_id : {}",
-                    &associate_id
-                );
+                if tracing::enabled!(tracing::Level::DEBUG) {
+                    debug!(
+                        "Failed to remove session: no such associate_id : {}",
+                        &associate_id
+                    );
+                }
             }
         }
     }

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use async_trait::async_trait;
 use bytes::BytesMut;
 
@@ -42,12 +42,14 @@ impl CommandProcessor for PacketProcessor {
 
                 let response_buf = session.send_and_recv(remote_addr, &packet.payload).await?;
 
-                debug!(
-                    "associate(ID:{}) packet(ID: {}) sent and recv {} bytes",
-                    &packet.assoc_id,
-                    &packet.pkt_id,
-                    response_buf.len()
-                );
+                if tracing::enabled!(tracing::Level::DEBUG) {
+                    debug!(
+                        "associate(ID:{}) packet(ID: {}) sent and recv {} bytes",
+                        &packet.assoc_id,
+                        &packet.pkt_id,
+                        response_buf.len()
+                    );
+                }
 
                 let response_packets = Packet::get_packets_from(
                     &response_buf,
@@ -61,17 +63,22 @@ impl CommandProcessor for PacketProcessor {
                     let packet_size = packet.estimate_size();
                     let mut bytes = BytesMut::with_capacity(packet_size);
                     packet.write_to_buf(&mut bytes);
-                    connection.send_datagram(bytes.freeze()).context(format!(
-                        "Failed to send data to client: {}",
-                        &connection.remote_address()
-                    ))?;
+                    connection.send_datagram(bytes.freeze()).map_err(|e| {
+                        anyhow::anyhow!(
+                            "Failed to send data to client: {}: {}",
+                            connection.remote_address(),
+                            e
+                        )
+                    })?;
                 }
 
-                debug!(
-                    "✅ Successfully processed UDP packet, dest: {} size: {}",
-                    &packet.address,
-                    response_buf.len()
-                );
+                if tracing::enabled!(tracing::Level::DEBUG) {
+                    debug!(
+                        "✅ Successfully processed UDP packet, dest: {} size: {}",
+                        &packet.address,
+                        response_buf.len()
+                    );
+                }
 
                 Ok(true)
             }
@@ -105,10 +112,12 @@ impl CommandProcessor for PacketProcessor {
                         match session.send_and_recv(remote_addr, &assembled_payload).await {
                             Ok(response_buf) => {
                                 let recv_n = response_buf.len();
-                                debug!(
-                                    "associate(ID:{}) fragmented packet(ID: {}) sent and recv {} bytes from {}",
-                                    assoc_id, completed_pkt_id, recv_n, &address
-                                );
+                                if tracing::enabled!(tracing::Level::DEBUG) {
+                                    debug!(
+                                        "associate(ID:{}) fragmented packet(ID: {}) sent and recv {} bytes from {}",
+                                        assoc_id, completed_pkt_id, recv_n, &address
+                                    );
+                                }
 
                                 // Send response back to client
                                 let response_packets = Packet::get_packets_from(
@@ -122,32 +131,41 @@ impl CommandProcessor for PacketProcessor {
                                     let packet_size = resp_packet.estimate_size();
                                     let mut bytes = BytesMut::with_capacity(packet_size);
                                     resp_packet.write_to_buf(&mut bytes);
-                                    connection.send_datagram(bytes.freeze()).context(format!(
-                                        "Failed to send data to client: {}",
-                                        &connection.remote_address()
-                                    ))?;
+                                    connection.send_datagram(bytes.freeze()).map_err(|e| {
+                                        anyhow::anyhow!(
+                                            "Failed to send data to client: {}: {}",
+                                            connection.remote_address(),
+                                            e
+                                        )
+                                    })?;
                                 }
 
-                                debug!(
-                                    "✅ Successfully processed fragmented UDP packet, dest: {} size: {}",
-                                    &address, recv_n
-                                );
+                                if tracing::enabled!(tracing::Level::DEBUG) {
+                                    debug!(
+                                        "✅ Successfully processed fragmented UDP packet, dest: {} size: {}",
+                                        &address, recv_n
+                                    );
+                                }
                             }
                             Err(e) => {
-                                debug!(
-                                    "Failed to send/recv fragmented packet for associate(ID:{}): {}",
-                                    assoc_id, e
-                                );
+                                if tracing::enabled!(tracing::Level::DEBUG) {
+                                    debug!(
+                                        "Failed to send/recv fragmented packet for associate(ID:{}): {}",
+                                        assoc_id, e
+                                    );
+                                }
                                 return Ok(true);
                             }
                         }
                     }
                 } else {
                     // Still waiting for more fragments
-                    debug!(
-                        "associate(ID:{}) packet(ID: {}) received fragment, waiting for more",
-                        assoc_id, pkt_id
-                    );
+                    if tracing::enabled!(tracing::Level::DEBUG) {
+                        debug!(
+                            "associate(ID:{}) packet(ID: {}) received fragment, waiting for more",
+                            assoc_id, pkt_id
+                        );
+                    }
                 }
 
                 Ok(true)

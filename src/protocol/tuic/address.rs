@@ -51,7 +51,9 @@ impl Address {
                         SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), addr.port())
                     }
                 };
-                debug!("Using local address for socket: {:?}", addr);
+                if tracing::enabled!(tracing::Level::DEBUG) {
+                    debug!("Using local address for socket: {:?}", addr);
+                }
                 Some(addr)
             } else {
                 unreachable!("Socket address should not be None if is_local_addr is true");
@@ -61,7 +63,9 @@ impl Address {
             socket_addr
         };
 
-        debug!("Resolved address to {:?}", socket_addr);
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            debug!("Resolved address to {:?}", socket_addr);
+        }
         socket_addr
     }
 
