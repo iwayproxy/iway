@@ -34,6 +34,7 @@ zeroize = { version = "1.6", features = ["derive"] }
 subtle = "2.5"
 zerocopy = { version = "0.8.31", features = ["derive"] }
 parking_lot = "0.12.5"
+moka = { version = "0.12", features = ["future"] }
 
 [profile.release]
 opt-level = 3

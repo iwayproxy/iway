@@ -7,13 +7,15 @@ use std::{
 
 use anyhow::{Context, Ok, Result, bail};
 use bytes::{BufMut, Bytes, BytesMut};
-use tokio::{
-    io::{AsyncRead, AsyncReadExt},
-    net,
-};
+use once_cell::sync::Lazy;
+use tokio::io::{AsyncRead, AsyncReadExt};
 use tracing::debug;
 
+use super::dns_cache::DnsResolver;
+
 type Port = u16;
+
+static GLOBAL_DNS_RESOLVER: Lazy<DnsResolver> = Lazy::new(|| DnsResolver::with_config(2000, 300));
 
 #[derive(Debug)]
 pub enum Address {
@@ -70,11 +72,7 @@ impl Address {
     }
 
     async fn resolve(&self, domain: &str, port: &Port) -> Result<SocketAddr> {
-        let mut addr_itr = net::lookup_host(format!("{}:{}", domain, port)).await?;
-        let Some(addr) = addr_itr.next() else {
-            bail!("Failed to resolve address: {}", domain);
-        };
-        Ok(addr)
+        GLOBAL_DNS_RESOLVER.resolve(domain, *port).await
     }
 
     pub async fn read_from<R>(read: &mut R) -> Result<Self>
@@ -152,7 +150,6 @@ impl AddressType {
 }
 
 use get_if_addrs::get_if_addrs;
-use once_cell::sync::Lazy;
 use std::collections::HashSet;
 
 static LOCAL_IPS: Lazy<HashSet<IpAddr>> = Lazy::new(|| {
