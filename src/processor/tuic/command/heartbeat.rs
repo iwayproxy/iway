@@ -22,11 +22,10 @@ impl CommandProcessor for HeartbeatProcessor {
     ) -> Result<bool> {
         context.wait_for_auth().await;
 
-        let heartbeat = match command {
-            Some(Command::Heartbeat(heartbeat)) => heartbeat,
-            _ => {
-                bail!("This must not happen! command: {:?}", command)
-            }
+        let heartbeat = if let Some(Command::Heartbeat(heartbeath)) = command {
+            heartbeath
+        } else {
+            bail!("This must not happen! command: {:?}", command)
         };
 
         debug!(

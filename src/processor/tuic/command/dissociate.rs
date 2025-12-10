@@ -22,11 +22,10 @@ impl CommandProcessor for DissociateProcess {
     ) -> Result<bool> {
         context.wait_for_auth().await;
 
-        let dissociate = match command {
-            Some(Command::Dissociate(dissociate)) => dissociate,
-            _ => {
-                bail!("This must not happen! command: {:?}", command)
-            }
+        let dissociate = if let Some(Command::Dissociate(dissociated)) = command {
+            dissociated
+        } else {
+            bail!("This must not happen! command: {:?}", command)
         };
 
         debug!(

@@ -23,11 +23,10 @@ impl CommandProcessor for AuthenticateProcessor {
         connection: Connection,
         command: Option<Command>,
     ) -> Result<bool> {
-        let authenticate = match command {
-            Some(Command::Authenticate(authenticate)) => authenticate,
-            _ => {
-                bail!("This must not happen! command: {:?}", command)
-            }
+        let authenticate = if let Some(Command::Authenticate(authenticate)) = command {
+            authenticate
+        } else {
+            bail!("This must not happen! command: {:?}", command)
         };
 
         let password = match self.authenticate_manager.password(authenticate.uuid()) {

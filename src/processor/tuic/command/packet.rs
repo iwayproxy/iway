@@ -23,11 +23,10 @@ impl CommandProcessor for PacketProcessor {
     ) -> Result<bool> {
         context.wait_for_auth().await;
 
-        let packet = match command {
-            Some(Command::Packet(packet)) => packet,
-            _ => {
-                bail!("This must not happen! command: {:?}", command)
-            }
+        let packet = if let Some(Command::Packet(p)) = command {
+            p
+        } else {
+            bail!("This must not happen! command: {:?}", command)
         };
 
         let context = context.clone();
