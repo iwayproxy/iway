@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 
 use bytes::{BufMut, Bytes, BytesMut};
-use std::fmt::Display;
+use std::{fmt::Display, sync::Arc};
 
 use crate::protocol::tuic::{address::Address, header::Header};
 use tokio::io::{AsyncRead, AsyncReadExt};
@@ -18,7 +18,7 @@ pub struct Packet {
     pub frag_total: u8,
     pub frag_id: u8,
     pub size: u16,
-    pub address: Address,
+    pub address: Arc<Address>,
     pub payload: Bytes,
 }
 
@@ -27,7 +27,7 @@ impl Packet {
         full_payload: &[u8],
         assoc_id: u16,
         pkt_id: u16,
-        address: &Address,
+        address: &Arc<Address>,
     ) -> Vec<Packet> {
         let total_len = full_payload.len();
         let frag_total = ((total_len + MAX_PAYLOAD_PER_PACKET - 1) / MAX_PAYLOAD_PER_PACKET) as u8;
@@ -42,9 +42,9 @@ impl Packet {
                 frag_id: frag_id as u8,
                 size: chunk.len() as u16,
                 address: if 0 < frag_id {
-                    Address::None
+                    Arc::new(Address::None)
                 } else {
-                    address.clone()
+                    Arc::clone(address)
                 },
                 payload: BytesMut::from(chunk).freeze(),
             });
@@ -88,7 +88,7 @@ impl Packet {
             .read_u16()
             .await
             .context("Failed to read size from stream")?;
-        let address = Address::read_from(r).await?;
+        let address = Arc::new(Address::read_from(r).await?);
 
         let mut payload_buf = BytesMut::with_capacity(size as usize);
         payload_buf.resize(size as usize, 0);
@@ -119,7 +119,7 @@ impl Packet {
     /// + FragTotal(1) + FragID(1) + Size(2) + Address(variable) + Payload
     pub fn estimate_size(&self) -> usize {
         let base_size = 10; // Fixed header fields
-        let addr_size = match &self.address {
+        let addr_size = match &*self.address {
             Address::SocketAddress(_, cache) => cache.len(),
             Address::DomainAddress(_, _, cache) => cache.len(),
             Address::None => 1,

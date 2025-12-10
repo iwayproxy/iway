@@ -13,7 +13,7 @@ pub struct UdpSession {
 
 pub struct UdpSessionInner {
     pakets: RwLock<HashMap<u16, FragmentedPacket>>,
-    address: RwLock<Option<Address>>,
+    address: RwLock<Option<Arc<Address>>>,
 }
 
 pub struct FragmentedPacket {
@@ -32,12 +32,12 @@ impl UdpSession {
         }
     }
 
-    pub fn get_address(&self) -> Option<Address> {
-        // Avoid unnecessary clone for Address comparison
-        self.inner.address.read().as_ref().cloned()
+    pub fn get_address(&self) -> Option<Arc<Address>> {
+        // Return Arc directly without cloning
+        self.inner.address.read().as_ref().map(Arc::clone)
     }
 
-    pub fn set_address(&self, addr: Address) {
+    pub fn set_address(&self, addr: Arc<Address>) {
         *self.inner.address.write() = Some(addr);
     }
 
@@ -89,9 +89,9 @@ impl UdpSession {
     pub fn accept(&self, packet: Packet) -> Option<u16> {
         // Single fragment never goes here
         // Store address from first fragment (if not None)
-        // Only clone address when needed (avoid unnecessary clone for None)
-        if !matches!(packet.address, Address::None) {
-            self.set_address(packet.address.clone());
+        // Use Arc::clone for cheap refcount increment instead of Address clone
+        if !matches!(*packet.address, Address::None) {
+            self.set_address(Arc::clone(&packet.address));
         }
 
         let mut packets = self.inner.pakets.write();
