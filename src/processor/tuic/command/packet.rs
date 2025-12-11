@@ -21,7 +21,10 @@ impl CommandProcessor for PacketProcessor {
         connection: Connection,
         command: Option<Command>,
     ) -> Result<bool> {
-        context.wait_for_auth().await;
+        let auth_result = context.wait_for_auth().await;
+        if auth_result != Some(true) {
+            bail!("Authentication failed or timed out");
+        }
 
         let packet = if let Some(Command::Packet(p)) = command {
             p

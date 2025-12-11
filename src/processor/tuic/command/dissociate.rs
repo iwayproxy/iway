@@ -20,7 +20,10 @@ impl CommandProcessor for DissociateProcess {
         connection: Connection,
         command: Option<Command>,
     ) -> Result<bool> {
-        context.wait_for_auth().await;
+        let auth_result = context.wait_for_auth().await;
+        if auth_result != Some(true) {
+            bail!("Authentication failed or timed out");
+        }
 
         let dissociate = if let Some(Command::Dissociate(dissociated)) = command {
             dissociated

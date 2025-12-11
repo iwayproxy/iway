@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use tokio::{sync::watch, time::timeout};
+use tracing::debug;
 
 pub struct OneShotNotifier {
     tx: watch::Sender<Option<bool>>,
@@ -17,7 +18,9 @@ impl OneShotNotifier {
         if self.tx.borrow().is_some() {
             return;
         }
-        let _ = self.tx.send(Some(v));
+        if let Err(e) = self.tx.send(Some(v)) {
+            debug!("Failed to send notification: {}", e);
+        }
     }
 
     pub async fn wait(&self) -> Option<bool> {
@@ -27,21 +30,35 @@ impl OneShotNotifier {
     pub async fn wait_timeout(&self, dur: Duration) -> Option<bool> {
         let mut rx = self.tx.subscribe();
 
+        // fast path: value already set before subscribe
         if let Some(v) = *rx.borrow() {
             return Some(v);
         }
 
-        timeout(dur, async {
+        // Run the waiting loop inside a single timeout so `dur` is the total
+        // maximum time we wait. The async block returns Some(v) if a value
+        // appears, or the final borrowed value (possibly None) if the sender
+        // is dropped.
+        let fut = async {
             loop {
-                if rx.changed().await.is_err() {
-                    return *rx.borrow(); // sender dropped
-                }
+                // fast path: value already set
                 if let Some(v) = *rx.borrow() {
                     return Some(v);
                 }
+
+                match rx.changed().await {
+                    Ok(()) => continue,
+                    Err(_) => return *rx.borrow(), // sender dropped
+                }
             }
-        })
-        .await
-        .unwrap_or(None)
+        };
+
+        match timeout(dur, fut).await {
+            Ok(r) => r,
+            Err(_) => {
+                debug!("Wait for authentication timeout after {:?}", dur);
+                None
+            }
+        }
     }
 }

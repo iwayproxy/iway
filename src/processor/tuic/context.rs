@@ -22,8 +22,8 @@ impl RuntimeContext {
         self.notifier.notify(result);
     }
 
-    pub async fn wait_for_auth(&self) {
-        self.notifier.wait().await;
+    pub async fn wait_for_auth(&self) -> Option<bool> {
+        self.notifier.wait().await
     }
 
     pub fn get_session(&self, associate_id: u16) -> UdpSession {
