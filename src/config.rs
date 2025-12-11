@@ -37,6 +37,13 @@ pub struct Config {
 
     udp_max_reassembly_bytes_per_session: Option<usize>,
 
+    // DNS cache configuration
+    #[serde(default = "default_dns_cache_size")]
+    dns_cache_size: u64,
+
+    #[serde(default = "default_dns_cache_ttl")]
+    dns_cache_ttl_secs: u64,
+
     users: Vec<UserConfig>,
 }
 
@@ -44,6 +51,14 @@ pub struct Config {
 const DEFAULT_SERVER_ADDR: &str = "[::]:443";
 const DEFAULT_CERT_PATH: &str = "server.crt";
 const DEFAULT_KEY_PATH: &str = "server.key";
+
+fn default_dns_cache_size() -> u64 {
+    2000
+}
+
+fn default_dns_cache_ttl() -> u64 {
+    300
+}
 
 impl Default for Config {
     fn default() -> Self {
@@ -55,6 +70,8 @@ impl Default for Config {
             key_path: DEFAULT_KEY_PATH.to_string(),
             udp_max_sessions: None,
             udp_max_reassembly_bytes_per_session: None,
+            dns_cache_size: 2000,
+            dns_cache_ttl_secs: 300,
             users: vec![],
         }
     }
