@@ -17,6 +17,10 @@ impl Heartbeat {
     {
         Ok(Self { header })
     }
+
+    pub fn read_from_buf<B: bytes::Buf>(header: Header, _buf: &mut B) -> Result<Self> {
+        Ok(Self { header })
+    }
 }
 
 impl fmt::Display for Heartbeat {

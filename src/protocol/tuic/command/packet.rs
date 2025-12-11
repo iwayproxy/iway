@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::{fmt::Display, sync::Arc};
 
 use crate::protocol::tuic::{address::Address, header::Header};
@@ -96,6 +96,44 @@ impl Packet {
             .await
             .context("Failed to read payload from stream")?;
         let payload = payload_buf.freeze();
+
+        Ok(Self {
+            header,
+            assoc_id,
+            pkt_id,
+            frag_total,
+            frag_id,
+            size,
+            address,
+            payload,
+        })
+    }
+
+    pub fn read_from_buf<B: bytes::Buf>(header: Header, buf: &mut B) -> Result<Self> {
+        if buf.remaining() < 10 {
+            anyhow::bail!(
+                "Not enough data for packet header (need 10 bytes, have {})",
+                buf.remaining()
+            );
+        }
+
+        let assoc_id = buf.get_u16();
+        let pkt_id = buf.get_u16();
+        let frag_total = buf.get_u8();
+        let frag_id = buf.get_u8();
+        let size = buf.get_u16();
+
+        let address = Arc::new(Address::read_from_buf(buf)?);
+
+        if buf.remaining() < size as usize {
+            anyhow::bail!(
+                "Not enough data for payload (need {} bytes, have {})",
+                size,
+                buf.remaining()
+            );
+        }
+
+        let payload = buf.copy_to_bytes(size as usize);
 
         Ok(Self {
             header,

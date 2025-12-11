@@ -3,10 +3,11 @@ use std::{
     fmt::{self},
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     result,
+    sync::Arc,
 };
 
 use anyhow::{Context, Ok, Result, bail};
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 use once_cell::sync::Lazy;
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tracing::debug;
@@ -17,10 +18,10 @@ type Port = u16;
 
 static GLOBAL_DNS_RESOLVER: Lazy<DnsResolver> = Lazy::new(|| DnsResolver::with_config(2000, 300));
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Address {
     SocketAddress(SocketAddr, Bytes), //Add bytes for conversion cache, originally from client command
-    DomainAddress(String, Port, Bytes), //Add bytes for conversion cache, originally from client command
+    DomainAddress(Arc<str>, Port, Bytes), //Add bytes for conversion cache, originally from client command
     None,
 }
 
@@ -95,12 +96,13 @@ impl Address {
                 read.read_exact(&mut domain_buf).await?;
 
                 let address = String::from_utf8(domain_buf.to_vec())?;
+                let domain_arc = Arc::from(address.into_boxed_str());
                 cache.put_slice(&domain_buf);
 
                 let port = read.read_u16().await?;
                 cache.put_u16(port);
 
-                Ok(Address::DomainAddress(address, port, cache.freeze()))
+                Ok(Address::DomainAddress(domain_arc, port, cache.freeze()))
             }
             AddressType::IpV4 => {
                 let mut cache = BytesMut::with_capacity(1 + 4 + 2);
@@ -123,6 +125,77 @@ impl Address {
                 cache.put_u128(ip_value);
 
                 let port = read.read_u16().await?;
+                cache.put_u16(port);
+
+                let socket_addr = SocketAddr::new(IpAddr::V6(Ipv6Addr::from(ip_value)), port);
+                Ok(Address::SocketAddress(socket_addr, cache.freeze()))
+            }
+            AddressType::None => Ok(Address::None),
+        }
+    }
+
+    pub fn read_from_buf<B: Buf>(buf: &mut B) -> Result<Self> {
+        if buf.remaining() < 1 {
+            anyhow::bail!("Not enough data to read address type");
+        }
+
+        let address_type = AddressType::try_from(buf.get_u8())?;
+
+        match address_type {
+            AddressType::Domain => {
+                if buf.remaining() < 1 {
+                    anyhow::bail!("Not enough data to read domain length");
+                }
+                let len = buf.get_u8() as usize;
+
+                if buf.remaining() < len + 2 {
+                    anyhow::bail!("Not enough data to read domain and port");
+                }
+
+                let mut cache = BytesMut::with_capacity(1 + 1 + len + 2);
+                cache.put_u8(address_type as u8);
+                cache.put_u8(len as u8);
+
+                // Extract domain bytes from buffer without copying
+                let domain_bytes = buf.copy_to_bytes(len);
+                let address = String::from_utf8(domain_bytes.to_vec())?;
+                let domain_arc = Arc::from(address.into_boxed_str());
+                cache.put_slice(&domain_bytes);
+
+                let port = buf.get_u16();
+                cache.put_u16(port);
+
+                Ok(Address::DomainAddress(domain_arc, port, cache.freeze()))
+            }
+            AddressType::IpV4 => {
+                if buf.remaining() < 6 {
+                    anyhow::bail!("Not enough data to read IPv4 address and port");
+                }
+
+                let mut cache = BytesMut::with_capacity(1 + 4 + 2);
+                cache.put_u8(address_type as u8);
+
+                let ip_value = buf.get_u32();
+                cache.put_u32(ip_value);
+
+                let port = buf.get_u16();
+                cache.put_u16(port);
+
+                let socket_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::from(ip_value)), port);
+                Ok(Address::SocketAddress(socket_addr, cache.freeze()))
+            }
+            AddressType::IpV6 => {
+                if buf.remaining() < 18 {
+                    anyhow::bail!("Not enough data to read IPv6 address and port");
+                }
+
+                let mut cache = BytesMut::with_capacity(1 + 16 + 2);
+                cache.put_u8(address_type.to_byte());
+
+                let ip_value = buf.get_u128();
+                cache.put_u128(ip_value);
+
+                let port = buf.get_u16();
                 cache.put_u16(port);
 
                 let socket_addr = SocketAddr::new(IpAddr::V6(Ipv6Addr::from(ip_value)), port);

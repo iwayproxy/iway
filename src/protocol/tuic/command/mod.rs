@@ -59,6 +59,28 @@ impl Command {
                 .context("Failed to parse Heartbeat command"),
         }
     }
+
+    pub fn read_from_buf<B: bytes::Buf>(buf: &mut B) -> Result<Self> {
+        let header = Header::read_from_buf(buf).context("Failed to read header from buffer")?;
+
+        match &header.command_type() {
+            CommandType::Authenticate => Authenticate::read_from_buf(header, buf)
+                .map(Command::Authenticate)
+                .context("Failed to parse Authenticate command from buffer"),
+            CommandType::Connect => Connect::read_from_buf(header, buf)
+                .map(Command::Connect)
+                .context("Failed to parse Connect command from buffer"),
+            CommandType::Packet => Packet::read_from_buf(header, buf)
+                .map(Command::Packet)
+                .context("Failed to parse Packet command from buffer"),
+            CommandType::Dissociate => Dissociate::read_from_buf(header, buf)
+                .map(Command::Dissociate)
+                .context("Failed to parse Dissociate command from buffer"),
+            CommandType::Heartbeat => Heartbeat::read_from_buf(header, buf)
+                .map(Command::Heartbeat)
+                .context("Failed to parse Heartbeat command from buffer"),
+        }
+    }
 }
 
 impl fmt::Display for Command {

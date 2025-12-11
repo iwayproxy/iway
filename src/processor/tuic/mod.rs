@@ -6,7 +6,6 @@ pub mod session;
 
 use anyhow::Result;
 use async_trait::async_trait;
-use std::io::Cursor;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -85,10 +84,10 @@ impl TuicConnectionProcessor {
     ) -> Result<()> {
         while let Ok(bytes) = connection.read_datagram().await {
             let context = Arc::clone(&context);
-            let cursor = Cursor::new(&bytes);
+            let mut buf = bytes;
 
-            let Ok(command) = Command::read_from(cursor).await else {
-                debug!("Failed to read command from unidirectional stream");
+            let Ok(command) = Command::read_from_buf(&mut buf) else {
+                debug!("Failed to read command from datagram");
                 break;
             };
 

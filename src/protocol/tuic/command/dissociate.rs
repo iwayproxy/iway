@@ -23,6 +23,17 @@ impl Dissociate {
         Ok(Self { header, asso_id })
     }
 
+    pub fn read_from_buf<B: bytes::Buf>(header: Header, buf: &mut B) -> Result<Self> {
+        if buf.remaining() < 2 {
+            anyhow::bail!(
+                "Not enough data to read dissociate command (need 2 bytes, have {})",
+                buf.remaining()
+            );
+        }
+        let asso_id = buf.get_u16();
+        Ok(Self { header, asso_id })
+    }
+
     pub fn assoc_id(&self) -> u16 {
         self.asso_id
     }

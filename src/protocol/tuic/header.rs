@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use std::fmt;
 
-use bytes::BufMut;
+use bytes::{Buf, BufMut};
 use tokio::io::AsyncRead;
 
 use super::{command::CommandType, version::Version};
@@ -38,6 +38,25 @@ impl Header {
         let command_type = CommandType::read_from(&mut read)
             .await
             .context("Failed to parse command type")?;
+
+        Ok(Self {
+            version,
+            command_type,
+        })
+    }
+
+    pub fn read_from_buf<B: Buf>(buf: &mut B) -> Result<Self> {
+        if buf.remaining() < 2 {
+            anyhow::bail!(
+                "Not enough data to read header (need 2 bytes, have {})",
+                buf.remaining()
+            );
+        }
+
+        let version =
+            Version::try_from(buf.get_u8()).context("Failed to parse version from buffer")?;
+        let command_type = CommandType::try_from(buf.get_u8())
+            .context("Failed to parse command type from buffer")?;
 
         Ok(Self {
             version,

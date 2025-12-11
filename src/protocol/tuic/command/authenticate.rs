@@ -50,6 +50,29 @@ impl Authenticate {
         })
     }
 
+    pub fn read_from_buf<B: bytes::Buf>(header: Header, buf: &mut B) -> Result<Self> {
+        if buf.remaining() < UUID_LEN + TOKEN_LEN {
+            anyhow::bail!(
+                "Not enough data to read authenticate command (need {} bytes, have {})",
+                UUID_LEN + TOKEN_LEN,
+                buf.remaining()
+            );
+        }
+
+        let mut uuid_buf: [u8; UUID_LEN] = [0; UUID_LEN];
+        uuid_buf.copy_from_slice(&buf.copy_to_bytes(UUID_LEN));
+        let uuid = Uuid::from_bytes(uuid_buf);
+
+        let mut token: [u8; TOKEN_LEN] = [0; TOKEN_LEN];
+        token.copy_from_slice(&buf.copy_to_bytes(TOKEN_LEN));
+
+        Ok(Self {
+            header,
+            uuid,
+            token,
+        })
+    }
+
     pub fn uuid(&self) -> &Uuid {
         &self.uuid
     }

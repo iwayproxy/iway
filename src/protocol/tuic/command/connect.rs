@@ -26,6 +26,12 @@ impl Connect {
             .context("Failed to parse Address from stream.")?;
         Ok(Self { header, address })
     }
+
+    pub fn read_from_buf<B: bytes::Buf>(header: Header, buf: &mut B) -> Result<Self> {
+        let address: Address =
+            Address::read_from_buf(buf).context("Failed to parse Address from buffer")?;
+        Ok(Self { header, address })
+    }
 }
 
 impl fmt::Display for Connect {
