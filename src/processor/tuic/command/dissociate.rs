@@ -37,7 +37,7 @@ impl CommandProcessor for DissociateProcess {
             &connection.remote_address()
         );
 
-        let _ = context.remove_session(dissociate.assoc_id());
+        context.remove_session(dissociate.assoc_id()).await;
         Ok(true)
     }
 }

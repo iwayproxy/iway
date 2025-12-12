@@ -103,7 +103,7 @@ impl CommandProcessor for ConnectProcessor {
                 anyhow::Ok(())
             };
 
-            let _ = tokio::spawn(async { exchange.await });
+            std::mem::drop(tokio::spawn(exchange));
         }
 
         Ok(false)

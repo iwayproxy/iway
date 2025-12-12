@@ -43,7 +43,7 @@ impl CommandProcessor for AuthenticateProcessor {
         let mut buff: [u8; 32] = [0; 32];
         if let Err(e) = &connection.export_keying_material(
             &mut buff,
-            (&authenticate).uuid().as_bytes(),
+            authenticate.uuid().as_bytes(),
             &password,
         ) {
             bail!(

@@ -82,7 +82,7 @@ impl TuicServer {
             .users()
             .iter()
             .filter_map(|u| {
-                uuid::Uuid::parse_str(&u.uuid())
+                uuid::Uuid::parse_str(u.uuid())
                     .ok()
                     .map(|id| (id, Arc::from(u.password().as_bytes())))
             })
@@ -98,7 +98,7 @@ impl TuicServer {
             processor,
             cert_path: PathBuf::from(config.cert_path()),
             key_path: PathBuf::from(config.key_path()),
-            shutdown_rx: shutdown_rx,
+            shutdown_rx,
         })
     }
 }
@@ -118,7 +118,7 @@ impl Server for TuicServer {
                 .with_protocol_versions(TLS_PROTOCOL_VERSIONS)
                 .with_context(|| "Failed to set TLS protocol versions!")?
                 .with_no_client_auth()
-                .with_single_cert(certs, key.into())
+                .with_single_cert(certs, key)
                 .with_context(|| "Failed to configure TLS certificate!")?;
 
         rustls_config.alpn_protocols = vec![b"h3".to_vec()];

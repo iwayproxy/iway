@@ -22,6 +22,12 @@ pub struct FragmentedPacket {
     received: Vec<Option<Bytes>>,
 }
 
+impl Default for UdpSession {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl UdpSession {
     pub fn new() -> Self {
         Self {
@@ -157,10 +163,8 @@ impl UdpSession {
                 .sum();
 
             let mut assembled = BytesMut::with_capacity(total_size);
-            for opt_bytes in frag_pkt.received {
-                if let Some(bytes) = opt_bytes {
-                    assembled.extend_from_slice(&bytes);
-                }
+            for bytes in frag_pkt.received.into_iter().flatten() {
+                assembled.extend_from_slice(&bytes);
             }
             Some(assembled.freeze())
         } else {

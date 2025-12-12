@@ -36,7 +36,7 @@ impl RuntimeContext {
         // Slow path: only create new session if it doesn't exist
         self.udp_sessions
             .entry(associate_id)
-            .or_insert_with(UdpSession::new)
+            .or_default()
             .clone()
     }
 

@@ -35,16 +35,13 @@ impl Address {
 
     pub async fn to_socket_address(&self) -> Option<SocketAddr> {
         let socket_addr = match self {
-            Address::SocketAddress(socket_addr, _) => Some(socket_addr.clone()),
-            Address::DomainAddress(domain, port, _) => match self.resolve(domain, port).await {
-                Result::Ok(socket_addr) => Some(socket_addr),
-                Result::Err(_) => None,
-            },
+            Address::SocketAddress(socket_addr, _) => Some(*socket_addr),
+            Address::DomainAddress(domain, port, _) => (self.resolve(domain, port).await).ok(),
             Address::None => None,
         };
 
         let socket_addr = if is_local_addr(socket_addr).await {
-            let socket_addr = if let Some(addr) = socket_addr {
+            if let Some(addr) = socket_addr {
                 let addr = match addr {
                     SocketAddr::V4(_) => {
                         SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), addr.port())
@@ -59,8 +56,7 @@ impl Address {
                 Some(addr)
             } else {
                 unreachable!("Socket address should not be None if is_local_addr is true");
-            };
-            socket_addr
+            }
         } else {
             socket_addr
         };
@@ -175,7 +171,7 @@ pub async fn is_local_addr(addr: Option<SocketAddr>) -> bool {
     LOCAL_IPS.contains(&addr.ip())
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Copy, Clone)]
 #[repr(u8)]
 pub enum AddressType {
     Domain = 0x00,
@@ -193,19 +189,18 @@ impl AddressType {
             .read_u8()
             .await
             .context("failed to read address type from stream")?;
-        AddressType::try_from(value).map_err(Into::into)
+        AddressType::try_from(value)
     }
 
     pub async fn from_address(value: Address) -> Self {
-        let address_type = match value {
+        match value {
             Address::SocketAddress(socket_address, _) => match socket_address {
                 SocketAddr::V4(_) => AddressType::IpV4,
                 SocketAddr::V6(_) => AddressType::IpV6,
             },
             Address::DomainAddress(_, _, _) => AddressType::Domain,
             Address::None => AddressType::None,
-        };
-        address_type
+        }
     }
 }
 
@@ -235,10 +230,10 @@ impl From<AddressType> for u8 {
 impl fmt::Display for AddressType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            AddressType::Domain => write!(f, "{}", "Domain"),
-            AddressType::IpV4 => write!(f, "{}", "IpV4"),
-            AddressType::IpV6 => write!(f, "{}", "IpV6"),
-            AddressType::None => write!(f, "{}", "None"),
+            AddressType::Domain => write!(f, "Domain"),
+            AddressType::IpV4 => write!(f, "IpV4"),
+            AddressType::IpV6 => write!(f, "IpV6"),
+            AddressType::None => write!(f, "None"),
         }
     }
 }

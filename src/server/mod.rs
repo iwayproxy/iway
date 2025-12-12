@@ -50,7 +50,7 @@ impl ServerManager {
     }
 
     pub async fn init(&self) -> Result<Instant, Error> {
-        for (_, server) in &self.servers {
+        for server in self.servers.values() {
             let mut server = server.lock().await;
 
             match server.init().await {
@@ -68,7 +68,7 @@ impl ServerManager {
 
     pub async fn start(&self) -> Result<Instant, Error> {
         for (_name, server) in self.servers.iter() {
-            let server = Arc::clone(&server);
+            let server = Arc::clone(server);
             tokio::spawn({
                 async move {
                     let mut server = server.lock().await;
@@ -82,7 +82,7 @@ impl ServerManager {
 
     pub async fn stop(&self) -> Result<Instant, Error> {
         for (name, server) in self.servers.iter() {
-            let server = Arc::clone(&server);
+            let server = Arc::clone(server);
             let name = name.clone();
             let _handle = tokio::spawn({
                 async move {
