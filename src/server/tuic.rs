@@ -1,5 +1,3 @@
-use std::fs::File;
-use std::io::BufReader;
 use std::path::PathBuf;
 use std::sync::{Arc, LazyLock};
 use std::time::Duration;
@@ -19,20 +17,17 @@ use quinn::{Endpoint, EndpointConfig, ServerConfig, TokioRuntime, TransportConfi
 use rustls::CipherSuite;
 use rustls::crypto::aws_lc_rs::cipher_suite::TLS13_AES_128_GCM_SHA256;
 use rustls::crypto::{self, CryptoProvider};
+use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-use rustls_pemfile::{certs, private_key};
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::sync::watch::Receiver;
 use tracing::{debug, info};
 
 fn load_certs(path: &Path) -> Result<Vec<CertificateDer<'static>>> {
-    let file =
-        File::open(path).with_context(|| format!("Failed to open certificate file: {:?}", path))?;
-
-    let certs =
-        certs(&mut BufReader::new(file)).collect::<Result<Vec<CertificateDer<'static>>, _>>();
-
-    let certs = certs.with_context(|| "Failed to parse certificates!")?;
+    let certs = CertificateDer::pem_file_iter(path)
+        .with_context(|| format!("Failed to read certificate file: {:?}", path))?
+        .collect::<std::result::Result<Vec<CertificateDer<'static>>, _>>()
+        .with_context(|| "Failed to parse certificates!")?;
 
     if certs.is_empty() {
         bail!("No certificates found in file");
@@ -42,14 +37,9 @@ fn load_certs(path: &Path) -> Result<Vec<CertificateDer<'static>>> {
 }
 
 fn load_key(path: &Path) -> Result<PrivateKeyDer<'static>> {
-    let file = File::open(path).context("Failed to open key file!")?;
-
-    let key =
-        private_key(&mut BufReader::new(file)).with_context(|| "Failed to parse private key")?;
-    match key {
-        Some(key) => Ok(key),
-        None => bail!("No private key found in file"),
-    }
+    let key = PrivateKeyDer::from_pem_file(path)
+        .with_context(|| format!("Failed to read private key file: {:?}", path))?;
+    Ok(key)
 }
 
 pub static TLS_PROTOCOL_VERSIONS: &[&rustls::SupportedProtocolVersion] = &[&rustls::version::TLS13];

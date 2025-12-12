@@ -14,7 +14,6 @@ tokio-util = { version = "0.7.16", features=["full"]}
 quinn = "0.11.9"
 socket2 = "0.6.1"
 rustls = { version = "0.23.32", features = ["aws_lc_rs"] }
-rustls-pemfile = "2.2.0"
 uuid = "1.18.1"
 libc = "0.2.177"
 serde = { version = "1.0.228", features = ["derive"] }
