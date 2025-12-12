@@ -20,7 +20,10 @@ impl CommandProcessor for HeartbeatProcessor {
         connection: Connection,
         command: Option<Command>,
     ) -> Result<bool> {
-        context.wait_for_auth().await;
+        let auth_result = context.wait_for_auth().await;
+        if auth_result != Some(true) {
+            bail!("Authentication failed or timed out");
+        }
 
         let heartbeat = if let Some(Command::Heartbeat(heartbeath)) = command {
             heartbeath

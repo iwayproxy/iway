@@ -24,31 +24,25 @@ impl OneShotNotifier {
     }
 
     pub async fn wait(&self) -> Option<bool> {
-        self.wait_timeout(Duration::from_secs(3)).await
+        self.wait_timeout(Duration::from_millis(100)).await
     }
 
     pub async fn wait_timeout(&self, dur: Duration) -> Option<bool> {
         let mut rx = self.tx.subscribe();
 
-        // fast path: value already set before subscribe
         if let Some(v) = *rx.borrow() {
             return Some(v);
         }
 
-        // Run the waiting loop inside a single timeout so `dur` is the total
-        // maximum time we wait. The async block returns Some(v) if a value
-        // appears, or the final borrowed value (possibly None) if the sender
-        // is dropped.
         let fut = async {
             loop {
-                // fast path: value already set
                 if let Some(v) = *rx.borrow() {
                     return Some(v);
                 }
 
                 match rx.changed().await {
                     Ok(()) => continue,
-                    Err(_) => return *rx.borrow(), // sender dropped
+                    Err(_) => return *rx.borrow(),
                 }
             }
         };
@@ -57,7 +51,7 @@ impl OneShotNotifier {
             Ok(r) => r,
             Err(_) => {
                 debug!("Wait for authentication timeout after {:?}", dur);
-                None
+                Some(false)
             }
         }
     }
