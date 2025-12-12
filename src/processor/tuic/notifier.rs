@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use tokio::{sync::watch, time::timeout};
-use tracing::{debug, error};
+use tracing::debug;
 
 pub struct OneShotNotifier {
     tx: watch::Sender<Option<bool>>,
@@ -11,7 +11,6 @@ pub struct OneShotNotifier {
 impl OneShotNotifier {
     pub fn new() -> Self {
         let (tx, _rx) = watch::channel(None);
-
         Self { tx, _rx }
     }
 
@@ -19,21 +18,19 @@ impl OneShotNotifier {
         if self.tx.borrow().is_some() {
             return;
         }
-
         if let Err(e) = self.tx.send(Some(v)) {
-            error!("Failed to send notity, error: {}", e);
+            debug!("Failed to send notification: {}", e);
         }
     }
 
     pub async fn wait(&self) -> Option<bool> {
-        // default timeout: 3 seconds
         self.wait_timeout(Duration::from_secs(3)).await
     }
 
     pub async fn wait_timeout(&self, dur: Duration) -> Option<bool> {
         let mut rx = self.tx.subscribe();
 
-        // fast path: value already set
+        // fast path: value already set before subscribe
         if let Some(v) = *rx.borrow() {
             return Some(v);
         }
@@ -58,8 +55,8 @@ impl OneShotNotifier {
 
         match timeout(dur, fut).await {
             Ok(r) => r,
-            Err(e) => {
-                debug!("This should not happen, there must be something wrong! error: {e}");
+            Err(_) => {
+                debug!("Wait for authentication timeout after {:?}", dur);
                 None
             }
         }
