@@ -249,7 +249,7 @@ impl Server for TuicServer {
                                 match incoming.accept() {
                                     Ok(connecting) => match connecting.await {
                                         Ok(connection) => {
-                                            let context = Arc::new(RuntimeContext::new(OneShotNotifier::new()));
+                                            let context = Arc::new(RuntimeContext::new(OneShotNotifier::default()));
 
                                             debug!("New connection connected (ID: {})", &connection.stable_id());
 

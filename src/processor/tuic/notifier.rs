@@ -9,7 +9,7 @@ pub struct OneShotNotifier {
 }
 
 impl OneShotNotifier {
-    pub fn new() -> Self {
+    fn new() -> Self {
         let (tx, _rx) = watch::channel(None);
         Self { tx, _rx }
     }
@@ -18,9 +18,7 @@ impl OneShotNotifier {
         if self.tx.borrow().is_some() {
             return;
         }
-        if let Err(e) = self.tx.send(Some(v)) {
-            debug!("Failed to send notification: {}", e);
-        }
+        let _ = self.tx.send(Some(v));
     }
 
     pub async fn wait(&self) -> Option<bool> {
@@ -34,25 +32,19 @@ impl OneShotNotifier {
             return Some(v);
         }
 
-        let fut = async {
-            loop {
-                if let Some(v) = *rx.borrow() {
-                    return Some(v);
-                }
-
-                match rx.changed().await {
-                    Ok(()) => continue,
-                    Err(_) => return *rx.borrow(),
-                }
-            }
-        };
-
-        match timeout(dur, fut).await {
-            Ok(r) => r,
+        match timeout(dur, rx.changed()).await {
+            Ok(Ok(())) => *rx.borrow(),
+            Ok(Err(_)) => *rx.borrow(),
             Err(_) => {
                 debug!("Wait for authentication timeout after {:?}", dur);
                 Some(false)
             }
         }
+    }
+}
+
+impl Default for OneShotNotifier {
+    fn default() -> Self {
+        Self::new()
     }
 }
