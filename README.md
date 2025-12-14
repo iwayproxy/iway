@@ -10,7 +10,7 @@ Github Action Builds For Releases.
 
 **Note:**
 
-1. iWay is currently under active development. V1.0.0 is the first stable release (supports only TUIC v5).
+1. iWay is currently under active development. V2.1.9 is the latest stable release, recommended for general use(supports only TUIC v5).
 
 2. Strongly recommended to use your own server.crt and server.key for security.
 
