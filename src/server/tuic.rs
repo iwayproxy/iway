@@ -139,11 +139,12 @@ impl Server for TuicServer {
 
         let transport_config = {
             let mut tc = TransportConfig::default();
-            tc.max_concurrent_bidi_streams(VarInt::from_u32(512))
-                .max_concurrent_uni_streams(VarInt::from_u32(512))
-                .stream_receive_window(VarInt::from_u32(4 * 1024 * 1024))
-                .receive_window(VarInt::from_u32(32 * 1024 * 1024))
-                .send_window(64 * 1024 * 1024)
+
+            tc.max_concurrent_bidi_streams(1024u32.into())
+                .max_concurrent_uni_streams(1024u32.into())
+                .stream_receive_window(VarInt::from_u32(1 << 20))
+                .receive_window(VarInt::from_u32(1 << 22))
+                .send_window(1 << 22)
                 .keep_alive_interval(Some(Duration::from_secs(10)))
                 .congestion_controller_factory(Arc::new(BbrConfig::default()))
                 .max_idle_timeout(Some(
@@ -191,8 +192,8 @@ impl Server for TuicServer {
                 }
             }
 
-            socket.set_recv_buffer_size(1 << 25)?;
-            socket.set_send_buffer_size(1 << 25)?;
+            socket.set_recv_buffer_size(1 << 22)?;
+            socket.set_send_buffer_size(1 << 22)?;
             socket.set_nonblocking(true)?;
             socket
                 .bind(&SockAddr::from(self.socket))
