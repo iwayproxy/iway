@@ -77,13 +77,13 @@ impl CommandProcessor for ConnectProcessor {
                 let mut quic_send = send;
 
                 let quic_to_tcp = async {
-                    let r = copy_with_buf(&mut quic_recv, &mut tcp_write, 8 * 1024).await;
+                    let r = copy_with_buf(&mut quic_recv, &mut tcp_write, 16 * 1024).await;
                     let _ = tcp_write.shutdown().await;
                     r
                 };
 
                 let tcp_to_quic = async {
-                    let r = copy_with_buf(&mut tcp_read, &mut quic_send, 8 * 1024).await;
+                    let r = copy_with_buf(&mut tcp_read, &mut quic_send, 16 * 1024).await;
                     let _ = quic_send.finish();
                     r
                 };

@@ -142,7 +142,7 @@ impl Server for TuicServer {
 
             tc.max_concurrent_bidi_streams(1024u32.into())
                 .max_concurrent_uni_streams(1024u32.into())
-                .stream_receive_window(VarInt::from_u32(1 << 20))
+                .stream_receive_window(VarInt::from_u32(1 << 21))
                 .receive_window(VarInt::from_u32(1 << 22))
                 .send_window(1 << 22)
                 .keep_alive_interval(Some(Duration::from_secs(10)))

@@ -30,10 +30,8 @@ mod protocol;
 mod server;
 
 fn init_logger() {
-    // 1️⃣ 文件轮转：按天滚动日志（logs/iway.log）
     let file_appender = rolling::daily("logs", "iway.log");
 
-    // 2️⃣ 文件日志层
     let file_layer = fmt::layer()
         .with_writer(file_appender)
         .with_ansi(false) // 文件中不使用彩色
@@ -43,7 +41,6 @@ fn init_logger() {
         .with_thread_names(true)
         .with_filter(tracing_subscriber::filter::LevelFilter::INFO);
 
-    // 3️⃣ 控制台日志层
     #[cfg(debug_assertions)]
     let console_layer = fmt::layer()
         .with_target(false)
@@ -57,7 +54,6 @@ fn init_logger() {
         .with_line_number(true)
         .pretty()
         .with_filter(tracing_subscriber::filter::LevelFilter::WARN);
-    // 4️⃣ 组合两个层
     tracing_subscriber::registry()
         .with(console_layer)
         .with(file_layer)
