@@ -145,13 +145,12 @@ impl AddressType {
     }
 }
 
-use get_if_addrs::get_if_addrs;
 use std::collections::HashSet;
 
 static LOCAL_IPS: Lazy<HashSet<IpAddr>> = Lazy::new(|| {
     let mut set = HashSet::new();
 
-    if let result::Result::Ok(ifaces) = get_if_addrs() {
+    if let result::Result::Ok(ifaces) = if_addrs::get_if_addrs() {
         for iface in ifaces {
             set.insert(iface.ip());
         }
