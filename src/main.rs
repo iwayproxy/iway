@@ -34,7 +34,7 @@ fn init_logger() {
 
     let file_layer = fmt::layer()
         .with_writer(file_appender)
-        .with_ansi(false) // 文件中不使用彩色
+        .with_ansi(false)
         .with_target(false)
         .with_level(true)
         .with_line_number(true)
