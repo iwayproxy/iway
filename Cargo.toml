@@ -31,11 +31,8 @@ zeroize = { version = "1.6", features = ["derive"] }
 subtle = "2.5"
 parking_lot = "0.12.5"
 moka = { version = "0.12", features = ["future"] }
-<<<<<<< HEAD
 if-addrs = "0.14.0"
-=======
 dhat = "0.3.3"
->>>>>>> dev
 
 [profile.release]
 opt-level = 3
