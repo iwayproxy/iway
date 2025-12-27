@@ -4,11 +4,15 @@ use tikv_jemallocator::Jemalloc;
 #[cfg(target_env = "msvc")]
 use mimalloc::MiMalloc;
 
-#[cfg(not(target_env = "msvc"))]
+#[cfg(feature = "dhat-heap")]
+#[global_allocator]
+static ALLOC: dhat::Alloc = dhat::Alloc;
+
+#[cfg(all(not(target_env = "msvc"), not(feature = "dhat-heap")))]
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
 
-#[cfg(target_env = "msvc")]
+#[cfg(all(target_env = "msvc", not(feature = "dhat-heap")))]
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
@@ -66,6 +70,9 @@ fn recommended_worker_threads(cpu_load_ratio: f64) -> usize {
 }
 
 fn main() {
+    #[cfg(feature = "dhat-heap")]
+    let _profiler = dhat::Profiler::new_heap();
+
     init_logger();
 
     let num_threads = recommended_worker_threads(1.0);
