@@ -76,29 +76,34 @@ impl CommandProcessor for ConnectProcessor {
                 let mut quic_recv = recv;
                 let mut quic_send = send;
 
-                let quic_to_tcp = async {
+                let mut quic_to_tcp = Box::pin(async {
                     let r = copy_with_buf(&mut quic_recv, &mut tcp_write, 16 * 1024).await;
                     let _ = tcp_write.shutdown().await;
                     r
-                };
+                });
 
-                let tcp_to_quic = async {
+                let mut tcp_to_quic = Box::pin(async {
                     let r = copy_with_buf(&mut tcp_read, &mut quic_send, 16 * 1024).await;
                     let _ = quic_send.finish();
                     r
+                });
+
+                let first = tokio::select! {
+                    r = &mut quic_to_tcp => (Some(r), None),
+                    r = &mut tcp_to_quic => (None, Some(r)),
                 };
 
-                tokio::select! {
-                    _ = quic_to_tcp => {
-                        let _ = quic_send.finish();
+                let (_r1, _r2) = match first {
+                    (Some(r1), None) => {
+                        let r2 = tcp_to_quic.await;
+                        (r1?, r2?)
                     }
-                    _ = tcp_to_quic => {
-                        let _ = tcp_write.shutdown().await;
+                    (None, Some(r2)) => {
+                        let r1 = quic_to_tcp.await;
+                        (r1?, r2?)
                     }
-                }
-
-                drop(tcp_write);
-                drop(tcp_read);
+                    _ => unreachable!(),
+                };
 
                 anyhow::Ok(())
             };

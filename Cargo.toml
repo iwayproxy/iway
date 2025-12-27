@@ -31,7 +31,11 @@ zeroize = { version = "1.6", features = ["derive"] }
 subtle = "2.5"
 parking_lot = "0.12.5"
 moka = { version = "0.12", features = ["future"] }
+<<<<<<< HEAD
 if-addrs = "0.14.0"
+=======
+dhat = "0.3.3"
+>>>>>>> dev
 
 [profile.release]
 opt-level = 3
@@ -41,8 +45,12 @@ panic = "abort"
 strip = true
 debug = false
 
+[features]
+dhat-heap = [] 
+
 [target.'cfg(target_env = "msvc")'.dependencies]
 mimalloc = "0.1"
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 tikv-jemallocator = "0.6.1"
+
