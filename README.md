@@ -38,6 +38,7 @@ Note:
 
 ## Directory Structure
 
+```text
 src/
 ├── config.rs                    # Configuration loader
 ├── lib.rs / main.rs             # Project entry point
@@ -50,6 +51,7 @@ src/
 ├── protocol/                    # Protocol definitions
 ├── server/                      # Server startup and management
 └── sockets/                     # Socket wrappers
+```
 
 ## Quick Start
 
