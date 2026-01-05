@@ -1,15 +1,39 @@
+[trojan]
+enabled = true
 server_addr = "[::]:443"
-udp_session_timeout = 30
-udp_socket_timeout = 10
 cert_path = "server.crt"
 key_path = "server.key"
-dns_cache_size = 2000
-dns_cache_ttl_secs = 300
+fallback_addr = "127.0.0.1:80"
 
-[[users]]
+[[trojan.users]]
 uuid = "e3f1c2b4a5d6478e9f0b1c2d3e4f5a6b"
 password = "password1"
 
-[[users]]
+[[trojan.users]]
 uuid = "e3f1c2b4a5d6478e9f0b1c2d3e4f5a88"
 password = "password2"
+
+[tuic]
+# disable TUIC by default
+enabled = false
+server_addr = "[::]:443"
+cert_path = "server.crt"
+key_path = "server.key"
+
+[[tuic.users]]
+uuid = "e3f1c2b4a5d6478e9f0b1c2d3e4f5a6b"
+password = "password1"
+
+[[tuic.users]]
+uuid = "e3f1c2b4a5d6478e9f0b1c2d3e4f5a88"
+password = "password2"
+
+[dns_cache]
+max_entries = 2000
+ttl_secs = 300
+
+[udp_session]
+session_timeout = 30
+socket_timeout = 10
+# max_sessions = 1000              # optional
+# max_reassembly_bytes_per_session = 65536  # optional

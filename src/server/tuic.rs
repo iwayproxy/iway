@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 use std::time::Duration;
 use std::{net::SocketAddr, path::Path, time::Instant};
 
@@ -13,13 +13,12 @@ use anyhow::{Context, Error, Result, anyhow, bail};
 use async_trait::async_trait;
 use quinn::congestion::BbrConfig;
 use quinn::crypto::rustls::QuicServerConfig;
-use quinn::{Endpoint, EndpointConfig, ServerConfig, TokioRuntime, TransportConfig, VarInt};
+use quinn::{Endpoint, ServerConfig, TransportConfig, VarInt};
 use rustls::CipherSuite;
+use rustls::crypto;
 use rustls::crypto::aws_lc_rs::cipher_suite::TLS13_AES_128_GCM_SHA256;
-use rustls::crypto::{self, CryptoProvider};
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::sync::watch::Receiver;
 use tracing::{debug, info};
 
@@ -44,19 +43,6 @@ fn load_key(path: &Path) -> Result<PrivateKeyDer<'static>> {
 
 pub static TLS_PROTOCOL_VERSIONS: &[&rustls::SupportedProtocolVersion] = &[&rustls::version::TLS13];
 
-pub static CRYPTO_PROVIDER: LazyLock<Arc<CryptoProvider>> = LazyLock::new(|| {
-    let mut provider = crypto::aws_lc_rs::default_provider();
-
-    provider.cipher_suites.retain(|suite| {
-        matches!(
-            suite.suite(),
-            CipherSuite::TLS13_AES_256_GCM_SHA384 | CipherSuite::TLS13_CHACHA20_POLY1305_SHA256
-        )
-    });
-
-    Arc::new(provider)
-});
-
 pub struct TuicServer {
     name: &'static str,
     socket: SocketAddr,
@@ -74,11 +60,13 @@ impl TuicServer {
         shutdown_rx: Option<Receiver<()>>,
     ) -> Result<Self, Error> {
         let socket = config
+            .tuic()
             .server_addr()
             .parse()
             .with_context(|| "Failed to parse server adress with error")?;
 
         let user_entries = config
+            .tuic()
             .users()
             .iter()
             .filter_map(|u| {
@@ -96,8 +84,8 @@ impl TuicServer {
             ep: None,
             status: ServerStatus::Initializing(Instant::now()),
             processor,
-            cert_path: PathBuf::from(config.cert_path()),
-            key_path: PathBuf::from(config.key_path()),
+            cert_path: PathBuf::from(config.tuic().cert_path()),
+            key_path: PathBuf::from(config.tuic().key_path()),
             shutdown_rx,
         })
     }
@@ -113,13 +101,21 @@ impl Server for TuicServer {
         let certs = load_certs(&self.cert_path)?;
         let key = load_key(&self.key_path)?;
 
-        let mut rustls_config =
-            rustls::ServerConfig::builder_with_provider(CRYPTO_PROVIDER.clone())
-                .with_protocol_versions(TLS_PROTOCOL_VERSIONS)
-                .with_context(|| "Failed to set TLS protocol versions!")?
-                .with_no_client_auth()
-                .with_single_cert(certs, key)
-                .with_context(|| "Failed to configure TLS certificate!")?;
+        let mut provider = crypto::ring::default_provider();
+
+        provider.cipher_suites.retain(|suite| {
+            matches!(
+                suite.suite(),
+                CipherSuite::TLS13_AES_256_GCM_SHA384 | CipherSuite::TLS13_CHACHA20_POLY1305_SHA256
+            )
+        });
+
+        let mut rustls_config = rustls::ServerConfig::builder_with_provider(Arc::new(provider))
+            .with_protocol_versions(TLS_PROTOCOL_VERSIONS)
+            .with_context(|| "Failed to set TLS protocol versions!")?
+            .with_no_client_auth()
+            .with_single_cert(certs, key)
+            .with_context(|| "Failed to configure TLS certificate!")?;
 
         rustls_config.alpn_protocols = vec![b"h3".to_vec()];
         rustls_config.max_early_data_size = u32::MAX;
@@ -157,57 +153,59 @@ impl Server for TuicServer {
 
         config.transport_config(Arc::new(transport_config));
 
-        let socket = {
-            let domain = match self.socket {
-                SocketAddr::V4(_) => Domain::IPV4,
-                SocketAddr::V6(_) => Domain::IPV6,
-            };
+        // let socket = {
+        //     let domain = match self.socket {
+        //         SocketAddr::V4(_) => Domain::IPV4,
+        //         SocketAddr::V6(_) => Domain::IPV6,
+        //     };
 
-            let socket = Socket::new(domain, Type::DGRAM, Some(Protocol::UDP))
-                .with_context(|| format!("Failed to create socket: {:?}!", domain))?;
+        //     let socket = Socket::new(domain, Type::DGRAM, Some(Protocol::UDP))
+        //         .with_context(|| format!("Failed to create socket: {:?}!", domain))?;
 
-            if Domain::IPV6 == domain {
-                socket
-                    .set_only_v6(false)
-                    .with_context(|| "Failed to set IPv6 only mode!")?;
-            }
-            socket.set_reuse_address(true)?;
-            #[cfg(unix)]
-            socket.set_reuse_port(true)?;
+        //     if Domain::IPV6 == domain {
+        //         socket
+        //             .set_only_v6(false)
+        //             .with_context(|| "Failed to set IPv6 only mode!")?;
+        //     }
+        //     socket.set_reuse_address(true)?;
+        //     #[cfg(unix)]
+        //     socket.set_reuse_port(true)?;
 
-            #[cfg(target_os = "linux")]
-            {
-                use libc::{IP_TOS, IPPROTO_IP};
-                use std::os::unix::prelude::AsRawFd;
-                // Set IP_TOS to 0x10 (low delay)
-                unsafe {
-                    let tos: libc::c_int = 0x10;
-                    libc::setsockopt(
-                        socket.as_raw_fd(),
-                        IPPROTO_IP,
-                        IP_TOS,
-                        &tos as *const _ as *const libc::c_void,
-                        std::mem::size_of_val(&tos) as libc::socklen_t,
-                    );
-                }
-            }
+        //     #[cfg(target_os = "linux")]
+        //     {
+        //         use libc::{IP_TOS, IPPROTO_IP};
+        //         use std::os::unix::prelude::AsRawFd;
+        //         // Set IP_TOS to 0x10 (low delay)
+        //         unsafe {
+        //             let tos: libc::c_int = 0x10;
+        //             libc::setsockopt(
+        //                 socket.as_raw_fd(),
+        //                 IPPROTO_IP,
+        //                 IP_TOS,
+        //                 &tos as *const _ as *const libc::c_void,
+        //                 std::mem::size_of_val(&tos) as libc::socklen_t,
+        //             );
+        //         }
+        //     }
 
-            socket.set_recv_buffer_size(1 << 22)?;
-            socket.set_send_buffer_size(1 << 22)?;
-            socket.set_nonblocking(true)?;
-            socket
-                .bind(&SockAddr::from(self.socket))
-                .with_context(|| format!("Failed to bind socket: {}", self.socket))?;
+        //     socket.set_recv_buffer_size(1 << 22)?;
+        //     socket.set_send_buffer_size(1 << 22)?;
+        //     socket.set_nonblocking(true)?;
+        //     socket
+        //         .bind(&SockAddr::from(self.socket))
+        //         .with_context(|| format!("Failed to bind socket: {}", self.socket))?;
 
-            std::net::UdpSocket::from(socket)
-        };
+        //     std::net::UdpSocket::from(socket)
+        // };
 
-        let ep = Endpoint::new(
-            EndpointConfig::default(),
-            Some(config),
-            socket,
-            Arc::new(TokioRuntime),
-        )?;
+        let ep = Endpoint::server(config, self.socket)?;
+
+        // let ep = Endpoint::new(
+        //     EndpointConfig::default(),
+        //     Some(config),
+        //     socket,
+        //     Arc::new(TokioRuntime),
+        // )?;
         self.ep = Some(ep);
         self.status = ServerStatus::Running(Instant::now());
         Ok(Instant::now())

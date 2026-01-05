@@ -4,8 +4,13 @@ use anyhow::Error;
 use async_trait::async_trait;
 use tokio::sync::{Mutex, watch::Receiver};
 use tracing::{error, info};
+use trojan::TrojanServer;
 use tuic::TuicServer;
 
+mod resolver;
+mod tls;
+mod trojan;
+pub mod trojan_fallback;
 mod tuic;
 
 #[async_trait]
@@ -32,19 +37,39 @@ impl ServerManager {
     ) -> Self {
         let mut servers: HashMap<String, Arc<Mutex<dyn Server>>> = HashMap::new();
 
-        let tuic_server = match TuicServer::new_with_config(config, shutdown_rx) {
-            Ok(server) => server,
-            Err(e) => {
-                error!("Failed to create TuicServer: {}", e);
-                return Self { servers };
-            }
-        };
+        if config.tuic().enabled() {
+            let tuic_server = match TuicServer::new_with_config(config.clone(), shutdown_rx.clone())
+            {
+                Ok(server) => server,
+                Err(e) => {
+                    error!("Failed to create TuicServer: {}", e);
+                    return Self { servers };
+                }
+            };
 
-        const TUIC_SERVER_NAME: &str = "Tuic";
-        servers.insert(
-            TUIC_SERVER_NAME.to_string(),
-            Arc::new(Mutex::new(tuic_server)),
-        );
+            const TUIC_SERVER_NAME: &str = "Tuic";
+            servers.insert(
+                TUIC_SERVER_NAME.to_string(),
+                Arc::new(Mutex::new(tuic_server)),
+            );
+        }
+
+        // 创建 Trojan 服务器
+        if config.trojan().enabled() {
+            let trojan_server = match TrojanServer::new_with_config(config, shutdown_rx) {
+                Ok(server) => server,
+                Err(e) => {
+                    error!("Failed to create TrojanServer: {}", e);
+                    return Self { servers };
+                }
+            };
+
+            const TROJAN_SERVER_NAME: &str = "Trojan";
+            servers.insert(
+                TROJAN_SERVER_NAME.to_string(),
+                Arc::new(Mutex::new(trojan_server)),
+            );
+        }
 
         Self { servers }
     }
