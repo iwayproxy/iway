@@ -6,7 +6,7 @@ use std::{
 };
 
 use anyhow::{Context, Ok, Result, bail};
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::{BufMut, BytesMut};
 use once_cell::sync::Lazy;
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tracing::debug;
@@ -15,24 +15,43 @@ type Port = u16;
 
 #[derive(Debug)]
 pub enum Address {
-    Socket(SocketAddr, Bytes),
-    Domain(String, Port, Bytes),
+    Socket(SocketAddr),
+    Domain(String, Port),
     None,
 }
 
 impl Address {
     pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
         match self {
-            Address::Socket(_, cache) => buf.put(cache.as_ref()),
-            Address::Domain(_, _, cache) => buf.put(cache.as_ref()),
-            Address::None => buf.put_u8(0xFF),
+            Address::Socket(socket_addr) => match socket_addr {
+                SocketAddr::V4(v4) => {
+                    buf.put_u8(AddressType::IpV4 as u8);
+                    let octets = v4.ip().octets();
+                    buf.put_slice(&octets);
+                    buf.put_u16(v4.port());
+                }
+                SocketAddr::V6(v6) => {
+                    buf.put_u8(AddressType::IpV6 as u8);
+                    let segments = v6.ip().octets();
+                    buf.put_slice(&segments);
+                    buf.put_u16(v6.port());
+                }
+            },
+            Address::Domain(domain, port) => {
+                buf.put_u8(AddressType::Domain as u8);
+                let domain_bytes = domain.as_bytes();
+                buf.put_u8(domain_bytes.len() as u8);
+                buf.put_slice(domain_bytes);
+                buf.put_u16(*port);
+            }
+            Address::None => buf.put_u8(AddressType::None as u8),
         }
     }
 
     pub async fn to_socket_address(&self) -> Option<SocketAddr> {
         let socket_addr = match self {
-            Address::Socket(socket_addr, _) => Some(*socket_addr),
-            Address::Domain(domain, port, _) => (self.resolve(domain, port).await).ok(),
+            Address::Socket(socket_addr) => Some(*socket_addr),
+            Address::Domain(domain, port) => (self.resolve(domain, port).await).ok(),
             Address::None => None,
         };
 
@@ -84,47 +103,31 @@ impl Address {
             AddressType::Domain => {
                 let len = read.read_u8().await?;
 
-                let mut cache = BytesMut::with_capacity(1 + 1 + len as usize + 2);
-                cache.put_u8(address_type as u8);
-                cache.put_u8(len);
-
                 let mut domain_buf = BytesMut::with_capacity(len as usize);
                 domain_buf.resize(len as usize, 0);
                 read.read_exact(&mut domain_buf).await?;
 
                 let address = String::from_utf8(domain_buf.to_vec())?;
-                cache.put_slice(&domain_buf);
 
                 let port = read.read_u16().await?;
-                cache.put_u16(port);
 
-                Ok(Address::Domain(address, port, cache.freeze()))
+                Ok(Address::Domain(address, port))
             }
             AddressType::IpV4 => {
-                let mut cache = BytesMut::with_capacity(1 + 4 + 2);
-                cache.put_u8(address_type as u8);
-
                 let ip_value = read.read_u32().await?;
-                cache.put_u32(ip_value);
 
                 let port = read.read_u16().await?;
-                cache.put_u16(port);
 
                 let socket_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::from(ip_value)), port);
-                Ok(Address::Socket(socket_addr, cache.freeze()))
+                Ok(Address::Socket(socket_addr))
             }
             AddressType::IpV6 => {
-                let mut cache = BytesMut::with_capacity(1 + 16 + 2);
-                cache.put_u8(address_type.to_byte());
-
                 let ip_value = read.read_u128().await?;
-                cache.put_u128(ip_value);
 
                 let port = read.read_u16().await?;
-                cache.put_u16(port);
 
                 let socket_addr = SocketAddr::new(IpAddr::V6(Ipv6Addr::from(ip_value)), port);
-                Ok(Address::Socket(socket_addr, cache.freeze()))
+                Ok(Address::Socket(socket_addr))
             }
             AddressType::None => Ok(Address::None),
         }
@@ -134,8 +137,8 @@ impl Address {
 impl fmt::Display for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Domain(addr, port, cache) => write!(f, "{addr}:{port} bin:{:?}", cache),
-            Self::Socket(socket_addr, cache) => write!(f, "{socket_addr} bin:{:?}", cache),
+            Self::Domain(addr, port) => write!(f, "{addr}:{port}"),
+            Self::Socket(socket_addr) => write!(f, "{socket_addr}"),
             Self::None => write!(f, "None"),
         }
     }
@@ -195,11 +198,11 @@ impl AddressType {
 
     pub async fn from_address(value: Address) -> Self {
         match value {
-            Address::Socket(socket_address, _) => match socket_address {
+            Address::Socket(socket_address) => match socket_address {
                 SocketAddr::V4(_) => AddressType::IpV4,
                 SocketAddr::V6(_) => AddressType::IpV6,
             },
-            Address::Domain(_, _, _) => AddressType::Domain,
+            Address::Domain(_, _) => AddressType::Domain,
             Address::None => AddressType::None,
         }
     }

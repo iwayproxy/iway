@@ -31,5 +31,3 @@ password = "password2"
 [udp_session]
 session_timeout = 30
 socket_timeout = 10
-session_timeout = 30
-

@@ -8,6 +8,7 @@ use crate::processor::tuic::CommandProcessor;
 use crate::processor::tuic::context::RuntimeContext;
 use crate::protocol::tuic::command::Command;
 use crate::protocol::tuic::command::packet::Packet;
+use crate::protocol::tuic::address::Address;
 use quinn::Connection;
 use tracing::{debug, error};
 
@@ -53,11 +54,13 @@ impl CommandProcessor for PacketProcessor {
                     );
                 }
 
+                let response_address = Arc::new(Address::Socket(remote_addr));
+
                 let response_packets = Packet::get_packets_from(
                     &response_buf,
                     packet.assoc_id,
                     packet.pkt_id,
-                    &packet.address,
+                    &response_address,
                 );
 
                 for packet in response_packets {
@@ -115,11 +118,13 @@ impl CommandProcessor for PacketProcessor {
                                     );
                                 }
 
+                                let response_address = Arc::new(Address::Socket(remote_addr));
+
                                 let response_packets = Packet::get_packets_from(
                                     &response_buf,
                                     assoc_id,
                                     completed_pkt_id,
-                                    &address,
+                                    &response_address,
                                 );
 
                                 for resp_packet in response_packets {

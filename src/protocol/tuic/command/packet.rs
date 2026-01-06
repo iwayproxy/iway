@@ -116,8 +116,11 @@ impl Packet {
     pub fn estimate_size(&self) -> usize {
         let base_size = 10;
         let addr_size = match &*self.address {
-            Address::Socket(_, cache) => cache.len(),
-            Address::Domain(_, _, cache) => cache.len(),
+            Address::Socket(socket_addr) => match socket_addr {
+                std::net::SocketAddr::V4(_) => 1 + 4 + 2,
+                std::net::SocketAddr::V6(_) => 1 + 16 + 2,
+            },
+            Address::Domain(domain, _) => 1 + 1 + domain.as_bytes().len() + 2,
             Address::None => 1,
         };
         base_size + addr_size + self.payload.len()
