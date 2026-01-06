@@ -12,11 +12,11 @@ anyhow = "1.0.100"
 tokio = { version = "1.48.0", features = ["full", "tracing"] }
 quinn = "0.11.9"
 socket2 = "0.6.1"
-rustls = { version = "0.23.35", features = ["ring"] }
+rustls = { version = "0.23.36", features = ["ring"] }
 uuid = "1.18.1"
 libc = "0.2.177"
 serde = { version = "1.0.228", features = ["derive"] }
-toml = "0.9.8"
+toml = "0.9.10"
 once_cell = "1.21.3"
 num_cpus = "1.17.0"
 sha2 = "0.10"
@@ -30,7 +30,6 @@ tracing-appender = "0.2"
 zeroize = { version = "1.6", features = ["derive"] }
 subtle = "2.5"
 parking_lot = "0.12.5"
-moka = { version = "0.12", features = ["future"] }
 if-addrs = "0.14.0"
 dhat = "0.3.3"
 tokio-rustls = "0.26.4"

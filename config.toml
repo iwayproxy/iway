@@ -28,11 +28,8 @@ password = "password1"
 uuid = "e3f1c2b4a5d6478e9f0b1c2d3e4f5a88"
 password = "password2"
 
-[dns_cache]
-max_entries = 2000
-ttl_secs = 300
-
 [udp_session]
 session_timeout = 30
 socket_timeout = 10
+session_timeout = 30
 

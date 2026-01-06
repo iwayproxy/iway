@@ -132,23 +132,7 @@ impl TuicConfig {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct DnsCacheConfig {
-    #[serde(default = "default_dns_cache_size")]
-    max_entries: u64,
-
-    #[serde(default = "default_dns_cache_ttl")]
-    ttl_secs: u64,
-}
-
-impl Default for DnsCacheConfig {
-    fn default() -> Self {
-        Self {
-            max_entries: 2000,
-            ttl_secs: 300,
-        }
-    }
-}
+// DNS cache configuration removed.
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UdpSessionConfig {
@@ -181,10 +165,6 @@ pub struct Config {
 
     #[serde(default)]
     tuic: TuicConfig,
-
-    #[serde(default)]
-    dns_cache: DnsCacheConfig,
-
     #[serde(default)]
     udp_session: UdpSessionConfig,
 }
@@ -203,14 +183,6 @@ fn default_cert_path() -> String {
 
 fn default_key_path() -> String {
     String::from(DEFAULT_KEY_PATH)
-}
-
-fn default_dns_cache_size() -> u64 {
-    2000
-}
-
-fn default_dns_cache_ttl() -> u64 {
-    300
 }
 
 fn default_udp_session_timeout() -> u64 {

@@ -11,11 +11,7 @@ use once_cell::sync::Lazy;
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tracing::debug;
 
-use super::dns_cache::DnsResolver;
-
 type Port = u16;
-
-static GLOBAL_DNS_RESOLVER: Lazy<DnsResolver> = Lazy::new(|| DnsResolver::with_config(2000, 300));
 
 #[derive(Debug)]
 pub enum Address {
@@ -68,7 +64,14 @@ impl Address {
     }
 
     async fn resolve(&self, domain: &str, port: &Port) -> Result<SocketAddr> {
-        GLOBAL_DNS_RESOLVER.resolve(domain, *port).await
+        let query_host = format!("{}:{}", domain, port);
+        let mut addr_itr = tokio::net::lookup_host(&query_host).await?;
+
+        let addr = addr_itr
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("Failed to resolve address: {}", domain))?;
+
+        Ok(addr)
     }
 
     pub async fn read_from<R>(read: &mut R) -> Result<Self>
