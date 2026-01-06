@@ -8,7 +8,6 @@ use rustls::crypto;
 use rustls::crypto::ring::sign::any_supported_type;
 use rustls::sign::CertifiedKey;
 use rustls::{CipherSuite, ServerConfig};
-use rustls_pemfile;
 use tokio_rustls::TlsAcceptor;
 
 use crate::server::resolver::PeerAwareCertResolver;
@@ -38,7 +37,6 @@ pub fn load_key(path: &Path) -> Result<rustls::pki_types::PrivateKeyDer<'static>
         .collect::<std::result::Result<Vec<_>, _>>()
         .with_context(|| format!("Failed to parse private keys from file: {:?}", path))?;
 
-    // Avoid unwrap: return explicit error if no keys
     let key = keys
         .into_iter()
         .next()

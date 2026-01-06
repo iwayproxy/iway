@@ -1,14 +1,10 @@
 use sha2::{Digest, Sha224};
 
-/// Trojan 认证管理器
-/// 支持多个密码，每个都计算并存储其 SHA224 哈希值
 pub struct TrojanAuthenticationManager {
-    // 密码 SHA224 哈希值（十六进制字符串）
     valid_hashes: Vec<String>,
 }
 
 impl TrojanAuthenticationManager {
-    /// 从密码列表创建认证管理器
     pub fn new(passwords: Vec<String>) -> Self {
         let valid_hashes = passwords
             .into_iter()
@@ -28,8 +24,6 @@ impl TrojanAuthenticationManager {
         Self { valid_hashes }
     }
 
-    /// 验证给定的密码哈希是否有效
-    /// 使用常数时间比较防止时序攻击
     pub fn verify_password_hash(&self, received_hash: &str) -> bool {
         let result = self
             .valid_hashes
@@ -48,8 +42,6 @@ impl TrojanAuthenticationManager {
     }
 }
 
-/// 常数时间比较，防止时序攻击
-/// 返回 true 如果两个字节切片相等
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
         return false;

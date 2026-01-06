@@ -6,7 +6,7 @@ use super::address::Address;
 use crate::authenticate::trojan::TrojanAuthenticationManager;
 
 const CRLF: &[u8] = b"\r\n";
-const PASSWORD_HASH_LENGTH: usize = 56; // SHA224 hex encoded length
+const PASSWORD_HASH_LENGTH: usize = 56;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]

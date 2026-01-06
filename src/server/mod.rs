@@ -32,14 +32,16 @@ pub struct ServerManager {
 
 impl ServerManager {
     pub fn new_with_config(
-        config: crate::config::Config,
+        config: std::sync::Arc<crate::config::Config>,
         shutdown_rx: Option<Receiver<()>>,
     ) -> Self {
         let mut servers: HashMap<String, Arc<Mutex<dyn Server>>> = HashMap::new();
 
         if config.tuic().enabled() {
-            let tuic_server = match TuicServer::new_with_config(config.clone(), shutdown_rx.clone())
-            {
+            let tuic_server = match TuicServer::new_with_config(
+                std::sync::Arc::clone(&config),
+                shutdown_rx.clone(),
+            ) {
                 Ok(server) => server,
                 Err(e) => {
                     error!("Failed to create TuicServer: {}", e);
@@ -49,24 +51,24 @@ impl ServerManager {
 
             const TUIC_SERVER_NAME: &str = "Tuic";
             servers.insert(
-                TUIC_SERVER_NAME.to_string(),
+                String::from(TUIC_SERVER_NAME),
                 Arc::new(Mutex::new(tuic_server)),
             );
         }
 
-        // 创建 Trojan 服务器
         if config.trojan().enabled() {
-            let trojan_server = match TrojanServer::new_with_config(config, shutdown_rx) {
-                Ok(server) => server,
-                Err(e) => {
-                    error!("Failed to create TrojanServer: {}", e);
-                    return Self { servers };
-                }
-            };
+            let trojan_server =
+                match TrojanServer::new_with_config(std::sync::Arc::clone(&config), shutdown_rx) {
+                    Ok(server) => server,
+                    Err(e) => {
+                        error!("Failed to create TrojanServer: {}", e);
+                        return Self { servers };
+                    }
+                };
 
             const TROJAN_SERVER_NAME: &str = "Trojan";
             servers.insert(
-                TROJAN_SERVER_NAME.to_string(),
+                String::from(TROJAN_SERVER_NAME),
                 Arc::new(Mutex::new(trojan_server)),
             );
         }

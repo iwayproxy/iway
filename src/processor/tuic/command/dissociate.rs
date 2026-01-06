@@ -17,7 +17,7 @@ impl CommandProcessor for DissociateProcess {
     async fn process(
         &self,
         context: Arc<RuntimeContext>,
-        connection: Connection,
+        connection: Arc<Connection>,
         command: Option<Command>,
     ) -> Result<bool> {
         let auth_result = context.wait_for_auth().await;

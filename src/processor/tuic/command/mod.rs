@@ -55,15 +55,14 @@ impl CommandProcessor for CommandUniprocessor {
     async fn process(
         &self,
         context: Arc<RuntimeContext>,
-        connection: Connection,
+        connection: Arc<Connection>,
         command: Option<Command>,
     ) -> Result<bool> {
         let command = match command {
             Some(command) => command,
             None => {
-                //magic value for command Connect
                 self.connect_processor
-                    .process(context, connection, None)
+                    .process(context, Arc::clone(&connection), None)
                     .await?;
                 return Ok(true);
             }
@@ -72,22 +71,22 @@ impl CommandProcessor for CommandUniprocessor {
         match command {
             Command::Authenticate(_) => {
                 self.authenticate_processor
-                    .process(context, connection, Some(command))
+                    .process(context, Arc::clone(&connection), Some(command))
                     .await?;
             }
             Command::Packet(_) => {
                 self.packet_processor
-                    .process(context, connection, Some(command))
+                    .process(context, Arc::clone(&connection), Some(command))
                     .await?;
             }
             Command::Heartbeat(_) => {
                 self.heartbeat_processor
-                    .process(context, connection, Some(command))
+                    .process(context, Arc::clone(&connection), Some(command))
                     .await?;
             }
             Command::Dissociate(_) => {
                 self.dissociate_processor
-                    .process(context, connection, Some(command))
+                    .process(context, Arc::clone(&connection), Some(command))
                     .await?;
             }
             _ => bail!("This must not happen! command: {}", command),

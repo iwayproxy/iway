@@ -21,7 +21,7 @@ impl CommandProcessor for ConnectProcessor {
     async fn process(
         &self,
         context: Arc<RuntimeContext>,
-        connection: Connection,
+        connection: Arc<Connection>,
         command: Option<Command>,
     ) -> Result<bool> {
         let auth_result = context.wait_for_auth().await;
@@ -37,7 +37,7 @@ impl CommandProcessor for ConnectProcessor {
         };
 
         while let Ok((send, mut recv)) = connection.accept_bi().await {
-            let connection = connection.clone();
+            let connection = Arc::clone(&connection);
 
             let connect = match Command::read_from(&mut recv).await {
                 Ok(Command::Connect(connect)) => connect,
@@ -160,12 +160,10 @@ where
     R: AsyncReadExt + Unpin,
     W: AsyncWriteExt + Unpin,
 {
-    // Use BytesMut from bytes crate for better memory efficiency
     let mut buf = bytes::BytesMut::with_capacity(buf_size);
     let mut total = 0;
 
     loop {
-        // Read into BytesMut instead of Vec for potential zero-copy benefits
         let n = reader.read_buf(&mut buf).await?;
         if n == 0 {
             break;

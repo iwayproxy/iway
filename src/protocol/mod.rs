@@ -1,2 +1,2 @@
-pub mod tuic;
 pub mod trojan;
+pub mod tuic;

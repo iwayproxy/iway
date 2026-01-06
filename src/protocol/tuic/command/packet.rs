@@ -113,15 +113,11 @@ impl Packet {
         1 == self.frag_total
     }
 
-    /// Estimate the serialized size of this packet to avoid over-allocation
-    ///
-    /// Calculates: Version(1) + CommandType(1) + AssocID(2) + PktID(2)
-    /// + FragTotal(1) + FragID(1) + Size(2) + Address(variable) + Payload
     pub fn estimate_size(&self) -> usize {
-        let base_size = 10; // Fixed header fields
+        let base_size = 10;
         let addr_size = match &*self.address {
-            Address::SocketAddress(_, cache) => cache.len(),
-            Address::DomainAddress(_, _, cache) => cache.len(),
+            Address::Socket(_, cache) => cache.len(),
+            Address::Domain(_, _, cache) => cache.len(),
             Address::None => 1,
         };
         base_size + addr_size + self.payload.len()

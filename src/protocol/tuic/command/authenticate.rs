@@ -30,7 +30,7 @@ impl Authenticate {
         R: AsyncRead + Unpin,
     {
         let mut uuid_buf: [u8; UUID_LEN] = [0; UUID_LEN];
-        // read_exact ensures we get the full UUID (16 bytes) or error out
+
         read.read_exact(&mut uuid_buf)
             .await
             .context("Failed to read uuid from stream")?;
@@ -38,7 +38,7 @@ impl Authenticate {
         let uuid = Uuid::from_bytes(uuid_buf);
 
         let mut token: [u8; TOKEN_LEN] = [0; TOKEN_LEN];
-        // token must be exactly TOKEN_LEN bytes
+
         read.read_exact(&mut token)
             .await
             .context("Failed to read token(password) from stream")?;
@@ -62,7 +62,6 @@ impl Authenticate {
 
 impl fmt::Display for Authenticate {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // Avoid printing raw token bytes in logs; show header, uuid, and token length
         write!(
             f,
             "header:{} uuid:{} token_len:{}",

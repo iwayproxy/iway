@@ -39,7 +39,6 @@ impl UdpSession {
     }
 
     pub fn get_address(&self) -> Option<Arc<Address>> {
-        // Return Arc directly without cloning
         self.inner.address.read().as_ref().map(Arc::clone)
     }
 
@@ -52,7 +51,6 @@ impl UdpSession {
         remote_addr: std::net::SocketAddr,
         data: &[u8],
     ) -> anyhow::Result<Vec<u8>> {
-        // Create a new socket for each request (don't reuse)
         let bind_addr = match remote_addr {
             std::net::SocketAddr::V4(_) => "0.0.0.0:0",
             std::net::SocketAddr::V6(_) => "[::]:0",
@@ -60,15 +58,10 @@ impl UdpSession {
 
         let socket = UdpSocket::bind(bind_addr).await?;
 
-        // Send data
         socket.send_to(data, remote_addr).await?;
 
-        // Receive response with timeout - use optimized buffer size
-        // Start with typical MTU size (4096) to avoid massive allocation
-        // Most UDP responses fit within this size
-        let mut buf = vec![0u8; 4096]; // Start with 4KB instead of 65KB
+        let mut buf = vec![0u8; 4096];
 
-        // Retry with larger buffer if needed (rare case)
         loop {
             let (n, _) = tokio::time::timeout(
                 std::time::Duration::from_secs(3),
@@ -76,10 +69,9 @@ impl UdpSession {
             )
             .await??;
 
-            // Check if buffer was too small (would require expansion)
             if n == buf.len() && buf.len() < 65535 {
                 buf.resize(buf.len() * 2, 0);
-                continue; // Retry with larger buffer
+                continue;
             }
 
             buf.truncate(n);
@@ -87,15 +79,9 @@ impl UdpSession {
         }
     }
 
-    pub async fn close_socket(&self) {
-        // Socket is no longer stored, nothing to clean up
-        // Sockets are created and destroyed per request
-    }
+    pub async fn close_socket(&self) {}
 
     pub fn accept(&self, packet: Packet) -> Option<u16> {
-        // Single fragment never goes here
-        // Store address from first fragment (if not None)
-        // Use Arc::clone for cheap refcount increment instead of Address clone
         if !matches!(*packet.address, Address::None) {
             self.set_address(Arc::clone(&packet.address));
         }
@@ -141,12 +127,10 @@ impl UdpSession {
         let mut packets = self.inner.pakets.write();
 
         if let Some(frag_pkt) = packets.remove(&pkt_id) {
-            // Edge case: no fragments received (should not happen in normal flow)
             if frag_pkt.received.is_empty() {
                 return None;
             }
 
-            // Optimization: if only one fragment, return it directly (zero-copy)
             if frag_pkt.received.len() == 1 {
                 if let Some(bytes) = frag_pkt.received.into_iter().next().unwrap() {
                     return Some(bytes);
@@ -154,8 +138,6 @@ impl UdpSession {
                 return None;
             }
 
-            // Multi-fragment case: calculate total size first to pre-allocate buffer
-            // This avoids BytesMut re-allocations during extend_from_slice
             let total_size: usize = frag_pkt
                 .received
                 .iter()

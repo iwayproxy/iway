@@ -47,11 +47,14 @@ impl TrojanConnectionProcessor {
         self
     }
 
-    pub async fn process_connection_tls(
+    pub async fn process_connection_tls<S>(
         &self,
-        mut tls_stream: TlsStream<TcpStream>,
+        mut tls_stream: TlsStream<S>,
         context: Arc<RuntimeContext>,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    {
         let trojan_request = match TrojanRequest::read_from(&mut tls_stream, &self.auth).await {
             Ok(Some(req)) => req,
             Ok(None) => {
@@ -76,12 +79,15 @@ impl TrojanConnectionProcessor {
         Ok(())
     }
 
-    async fn handle_connect_tls(
+    async fn handle_connect_tls<S>(
         &self,
-        tls_stream: TlsStream<TcpStream>,
+        tls_stream: TlsStream<S>,
         request: TrojanRequest,
         _context: Arc<RuntimeContext>,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    {
         let target_addr = request.address.to_address_string();
 
         let server_stream = TcpStream::connect(&target_addr)
@@ -93,33 +99,29 @@ impl TrojanConnectionProcessor {
         Ok(())
     }
 
-    async fn handle_udp_associate_tls(
+    async fn handle_udp_associate_tls<S>(
         &self,
-        tls_stream: TlsStream<TcpStream>,
+        tls_stream: TlsStream<S>,
         _request: TrojanRequest,
         _context: Arc<RuntimeContext>,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    {
         use tokio_util::sync::CancellationToken;
 
         let (mut tls_reader, mut tls_writer) = split(tls_stream);
 
-        // Create separate sockets for IPv4 and IPv6 to avoid dual-stack issues on macOS
         let udp_v4 = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
-        // IPv6 bind may fail on some systems; keep optional
         let udp_v6 = match UdpSocket::bind("[::]:0").await {
             Ok(s) => Some(Arc::new(s)),
             Err(_) => None,
         };
 
-        // `last_addr` removed: responses now use UDP packet source address directly
-
-        let (udp_resp_tx, mut udp_resp_rx) = mpsc::channel::<(SocketAddr, Vec<u8>)>(1024);
+        let (udp_resp_tx, mut udp_resp_rx) = mpsc::channel::<(SocketAddr, bytes::Bytes)>(1024);
 
         let cancel = CancellationToken::new();
 
-        /* =========================
-         * UDP recv loop (listen on both v4 and v6 if available)
-         * ========================= */
         let recv_task = {
             let udp_v4 = udp_v4.clone();
             let udp_v6 = udp_v6.clone();
@@ -127,8 +129,7 @@ impl TrojanConnectionProcessor {
             let cancel = cancel.clone();
 
             tokio::spawn(async move {
-                // Shared single buffer to save memory; protected by async mutex
-                let shared_buf = Arc::new(Mutex::new(vec![0u8; 65535]));
+                let shared_buf = Arc::new(Mutex::new(vec![0u8; 4096]));
 
                 loop {
                     if let Some(ref v6) = udp_v6 {
@@ -136,13 +137,11 @@ impl TrojanConnectionProcessor {
                         let shared_buf2 = shared_buf.clone();
 
                         tokio::select! {
-                            // IPv4 branch: hold lock, recv_into buffer, copy bytes while holding lock,
-                            // then drop lock and send through channel.
                             res = async {
                                 let mut b = shared_buf1.lock().await;
                                 match udp_v4.recv_from(&mut b[..]).await {
                                     Ok((n, src)) => {
-                                        let data = b[..n].to_vec();
+                                        let data = bytes::Bytes::copy_from_slice(&b[..n]);
                                         Ok((src, data))
                                     }
                                     Err(e) => Err(e),
@@ -157,12 +156,11 @@ impl TrojanConnectionProcessor {
                                     Err(_) => break,
                                 }
                             }
-                            // IPv6 branch: same as above
                             res = async {
                                 let mut b = shared_buf2.lock().await;
-                                match v6.recv_from(&mut b[..]).await {
+                                        match v6.recv_from(&mut b[..]).await {
                                     Ok((n, src)) => {
-                                        let data = b[..n].to_vec();
+                                        let data = bytes::Bytes::copy_from_slice(&b[..n]);
                                         Ok((src, data))
                                     }
                                     Err(e) => Err(e),
@@ -186,7 +184,7 @@ impl TrojanConnectionProcessor {
                                 let mut b = shared_buf1.lock().await;
                                 match udp_v4.recv_from(&mut b[..]).await {
                                     Ok((n, src)) => {
-                                        let data = b[..n].to_vec();
+                                        let data = bytes::Bytes::copy_from_slice(&b[..n]);
                                         Ok((src, data))
                                     }
                                     Err(e) => Err(e),
@@ -237,10 +235,7 @@ impl TrojanConnectionProcessor {
                         } else if let Some(ref v6) = udp_v6 {
                             v6.send_to(&frame.payload, target).await
                         } else {
-                            Err(std::io::Error::new(
-                                std::io::ErrorKind::Other,
-                                "No IPv6 socket available",
-                            ))
+                            Err(std::io::Error::other("No IPv6 socket available"))
                         };
 
                         if let Err(e) = send_res {
@@ -251,15 +246,11 @@ impl TrojanConnectionProcessor {
             })
         };
 
-        /* =========================
-         * TLS writer ← UDP responses
-         * ========================= */
         loop {
             tokio::select! {
                 msg = udp_resp_rx.recv() => {
                     let Some((src, payload)) = msg else { break; };
 
-                    // Convert the UDP packet source to protocol Address and write back
                     let addr = match src {
                         std::net::SocketAddr::V4(sa_v4) => Address {
                             addr_type: AddressType::IPv4,
@@ -273,7 +264,7 @@ impl TrojanConnectionProcessor {
                         },
                     };
 
-                    if let Err(e) = write_trojan_udp_frame(&mut tls_writer, &addr, &payload).await {
+                    if let Err(e) = write_trojan_udp_frame(&mut tls_writer, &addr, payload.as_ref()).await {
                         tracing::error!("Failed to write UDP frame to TLS: {}", e);
                         break;
                     }
@@ -285,12 +276,9 @@ impl TrojanConnectionProcessor {
             }
         }
 
-        /* =========================
-         * CLEANUP —— 关键
-         * ========================= */
-        cancel.cancel(); // 通知所有任务退出
-        drop(udp_resp_tx); // 让 recv() 返回 None
-        recv_task.abort(); // 防止 recv_from 卡死
+        cancel.cancel();
+        drop(udp_resp_tx);
+        recv_task.abort();
         send_task.abort();
 
         Ok(())

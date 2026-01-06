@@ -19,29 +19,23 @@ impl UserConfig {
     }
 }
 
-/// Trojan 协议配置
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TrojanConfig {
-    /// 是否启用 Trojan 协议
     #[serde(default = "default_trojan_enabled")]
     enabled: bool,
-    /// 服务器监听地址（Trojan 专用）
+
     #[serde(default = "default_server_addr")]
     server_addr: String,
 
-    /// TLS 证书路径（Trojan 专用）
     #[serde(default = "default_cert_path")]
     cert_path: String,
 
-    /// TLS 密钥路径（Trojan 专用）
     #[serde(default = "default_key_path")]
     key_path: String,
 
-    /// 用户配置列表（Trojan 专用）
     #[serde(default)]
     users: Vec<UserConfig>,
 
-    /// 认证失败时的 fallback 地址（通常指向伪装的 HTTP 服务器）
     #[serde(default = "default_trojan_fallback_addr")]
     fallback_addr: String,
 }
@@ -86,26 +80,20 @@ impl TrojanConfig {
     }
 }
 
-/// TUIC 协议配置
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TuicConfig {
-    /// 是否启用 Tuic 协议
     #[serde(default = "default_tuic_enabled")]
     enabled: bool,
 
-    /// 服务器监听地址（Tuic 专用）
     #[serde(default = "default_server_addr")]
     server_addr: String,
 
-    /// TLS 证书路径（Tuic 专用）
     #[serde(default = "default_cert_path")]
     cert_path: String,
 
-    /// TLS 密钥路径（Tuic 专用）
     #[serde(default = "default_key_path")]
     key_path: String,
 
-    /// 用户配置列表（Tuic 专用）
     #[serde(default)]
     users: Vec<UserConfig>,
 }
@@ -161,21 +149,17 @@ impl Default for DnsCacheConfig {
         }
     }
 }
-/// UDP 会话配置
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UdpSessionConfig {
-    /// UDP 会话超时时间（秒）
     #[serde(default = "default_udp_session_timeout")]
     session_timeout: u64,
 
-    /// UDP 套接字超时时间（秒）
     #[serde(default = "default_udp_socket_timeout")]
     socket_timeout: u64,
 
-    /// UDP 会话数上限（None 表示无限制）
     max_sessions: Option<usize>,
 
-    /// 单个 UDP 会话的重组缓冲区大小上限（字节）
     max_reassembly_bytes_per_session: Option<usize>,
 }
 
@@ -190,41 +174,35 @@ impl Default for UdpSessionConfig {
     }
 }
 
-/// 全局配置结构
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Config {
-    /// Trojan 协议配置
     #[serde(default)]
     trojan: TrojanConfig,
 
-    /// TUIC 协议配置
     #[serde(default)]
     tuic: TuicConfig,
 
-    /// DNS 缓存配置
     #[serde(default)]
     dns_cache: DnsCacheConfig,
 
-    /// UDP 会话配置
     #[serde(default)]
     udp_session: UdpSessionConfig,
 }
 
-// 默认值常量定义
 const DEFAULT_SERVER_ADDR: &str = "[::]:443";
 const DEFAULT_CERT_PATH: &str = "server.crt";
 const DEFAULT_KEY_PATH: &str = "server.key";
 
 fn default_server_addr() -> String {
-    DEFAULT_SERVER_ADDR.to_string()
+    String::from(DEFAULT_SERVER_ADDR)
 }
 
 fn default_cert_path() -> String {
-    DEFAULT_CERT_PATH.to_string()
+    String::from(DEFAULT_CERT_PATH)
 }
 
 fn default_key_path() -> String {
-    DEFAULT_KEY_PATH.to_string()
+    String::from(DEFAULT_KEY_PATH)
 }
 
 fn default_dns_cache_size() -> u64 {
@@ -252,18 +230,7 @@ fn default_tuic_enabled() -> bool {
 }
 
 fn default_trojan_fallback_addr() -> String {
-    "127.0.0.1:80".to_string()
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            trojan: TrojanConfig::default(),
-            tuic: TuicConfig::default(),
-            dns_cache: DnsCacheConfig::default(),
-            udp_session: UdpSessionConfig::default(),
-        }
-    }
+    String::from("127.0.0.1:80")
 }
 
 impl Config {
@@ -278,8 +245,6 @@ impl Config {
         Ok(())
     }
 
-    // 主配置访问方法
-    // 子配置访问方法
     pub fn trojan(&self) -> &TrojanConfig {
         &self.trojan
     }

@@ -26,10 +26,10 @@ impl TuicConnectionProcessor {
     pub async fn process_uni(
         &self,
         context: Arc<RuntimeContext>,
-        connection: Connection,
+        connection: Arc<Connection>,
     ) -> Result<()> {
         loop {
-            let connection = connection.clone();
+            let connection = Arc::clone(&connection);
 
             let recv_stream = match connection.accept_uni().await {
                 Ok(recv_stream) => recv_stream,
@@ -55,7 +55,7 @@ impl TuicConnectionProcessor {
 
             tokio::spawn(async move {
                 let _ = command_processor
-                    .process(context, connection.clone(), Some(command))
+                    .process(context, Arc::clone(&connection), Some(command))
                     .await;
             });
         }
@@ -66,11 +66,14 @@ impl TuicConnectionProcessor {
     pub async fn process_bidirectional(
         &self,
         context: Arc<RuntimeContext>,
-        connection: Connection,
+        connection: Arc<Connection>,
     ) -> Result<()> {
         let command_processor = self.command_processor.clone();
         tokio::spawn(async move {
-            if let Err(e) = command_processor.process(context, connection, None).await {
+            if let Err(e) = command_processor
+                .process(context, Arc::clone(&connection), None)
+                .await
+            {
                 debug!("Failed to process Connect command: {}", e);
             }
         });
@@ -81,7 +84,7 @@ impl TuicConnectionProcessor {
     pub async fn process_datagram(
         &self,
         context: Arc<RuntimeContext>,
-        connection: Connection,
+        connection: Arc<Connection>,
     ) -> Result<()> {
         while let Ok(bytes) = connection.read_datagram().await {
             let context = Arc::clone(&context);
@@ -93,10 +96,10 @@ impl TuicConnectionProcessor {
             };
 
             let command_processor = Arc::clone(&self.command_processor);
-            let connection = connection.clone();
+            let connection = Arc::clone(&connection);
             tokio::spawn(async move {
                 let _ = command_processor
-                    .process(context, connection.clone(), Some(command))
+                    .process(context, Arc::clone(&connection), Some(command))
                     .await;
             });
         }
@@ -121,7 +124,7 @@ pub trait CommandProcessor {
     async fn process(
         &self,
         context: Arc<RuntimeContext>,
-        connection: Connection,
+        connection: Arc<Connection>,
         command: Option<Command>,
     ) -> Result<bool>;
 }

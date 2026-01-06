@@ -20,7 +20,7 @@ impl CommandProcessor for AuthenticateProcessor {
     async fn process(
         &self,
         context: Arc<RuntimeContext>,
-        connection: Connection,
+        connection: Arc<Connection>,
         command: Option<Command>,
     ) -> Result<bool> {
         let authenticate = if let Some(Command::Authenticate(authenticate)) = command {
@@ -41,11 +41,9 @@ impl CommandProcessor for AuthenticateProcessor {
         };
 
         let mut buff: [u8; 32] = [0; 32];
-        if let Err(e) = &connection.export_keying_material(
-            &mut buff,
-            authenticate.uuid().as_bytes(),
-            &password,
-        ) {
+        if let Err(e) =
+            &connection.export_keying_material(&mut buff, authenticate.uuid().as_bytes(), &password)
+        {
             bail!(
                 "Failed to export keying material for uuid={} from={} err={:?}",
                 &authenticate.uuid(),

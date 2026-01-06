@@ -27,24 +27,17 @@ impl RuntimeContext {
     }
 
     pub fn get_session(&self, associate_id: u16) -> UdpSession {
-        // Fast path: try direct get first (cache-friendly for existing sessions)
-        // This avoids the full entry API cost for the common case
         if let Some(session) = self.udp_sessions.get(&associate_id) {
             return session.clone();
         }
 
-        // Slow path: only create new session if it doesn't exist
-        self.udp_sessions
-            .entry(associate_id)
-            .or_default()
-            .clone()
+        self.udp_sessions.entry(associate_id).or_default().clone()
     }
 
     pub async fn remove_session(&self, associate_id: u16) {
         let r = self.udp_sessions.remove(&associate_id);
         match r {
             Some((_associate_id, session)) => {
-                // Close UDP socket before removing session
                 session.close_socket().await;
                 if tracing::enabled!(tracing::Level::DEBUG) {
                     debug!(

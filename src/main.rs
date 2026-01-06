@@ -21,6 +21,7 @@ use anyhow::Result;
 use tokio::sync::watch;
 
 use server::ServerManager;
+use std::sync::Arc;
 use std::{cmp::max, env, time::Instant};
 use tracing::{error, info};
 
@@ -100,7 +101,7 @@ async fn async_main() -> Result<(), String> {
 
     let config_path = env::args()
         .nth(1)
-        .unwrap_or_else(|| "config.toml".to_string());
+        .unwrap_or_else(|| String::from("config.toml"));
     let config = config::Config::from_file(config_path).unwrap_or_else(|e| {
         info!("Using default config: {}", e);
         let default_config = config::Config::default();
@@ -110,8 +111,10 @@ async fn async_main() -> Result<(), String> {
         default_config
     });
 
+    let config = Arc::new(config);
+
     let (shutdown_tx, shutdown_rx) = watch::channel(());
-    let server_manager = ServerManager::new_with_config(config, Some(shutdown_rx));
+    let server_manager = ServerManager::new_with_config(Arc::clone(&config), Some(shutdown_rx));
 
     match server_manager.init().await {
         Ok(_) => info!(

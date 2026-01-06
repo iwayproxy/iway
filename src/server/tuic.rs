@@ -56,7 +56,7 @@ pub struct TuicServer {
 
 impl TuicServer {
     pub fn new_with_config(
-        config: crate::config::Config,
+        config: std::sync::Arc<crate::config::Config>,
         shutdown_rx: Option<Receiver<()>>,
     ) -> Result<Self, Error> {
         let socket = config
@@ -153,59 +153,8 @@ impl Server for TuicServer {
 
         config.transport_config(Arc::new(transport_config));
 
-        // let socket = {
-        //     let domain = match self.socket {
-        //         SocketAddr::V4(_) => Domain::IPV4,
-        //         SocketAddr::V6(_) => Domain::IPV6,
-        //     };
-
-        //     let socket = Socket::new(domain, Type::DGRAM, Some(Protocol::UDP))
-        //         .with_context(|| format!("Failed to create socket: {:?}!", domain))?;
-
-        //     if Domain::IPV6 == domain {
-        //         socket
-        //             .set_only_v6(false)
-        //             .with_context(|| "Failed to set IPv6 only mode!")?;
-        //     }
-        //     socket.set_reuse_address(true)?;
-        //     #[cfg(unix)]
-        //     socket.set_reuse_port(true)?;
-
-        //     #[cfg(target_os = "linux")]
-        //     {
-        //         use libc::{IP_TOS, IPPROTO_IP};
-        //         use std::os::unix::prelude::AsRawFd;
-        //         // Set IP_TOS to 0x10 (low delay)
-        //         unsafe {
-        //             let tos: libc::c_int = 0x10;
-        //             libc::setsockopt(
-        //                 socket.as_raw_fd(),
-        //                 IPPROTO_IP,
-        //                 IP_TOS,
-        //                 &tos as *const _ as *const libc::c_void,
-        //                 std::mem::size_of_val(&tos) as libc::socklen_t,
-        //             );
-        //         }
-        //     }
-
-        //     socket.set_recv_buffer_size(1 << 22)?;
-        //     socket.set_send_buffer_size(1 << 22)?;
-        //     socket.set_nonblocking(true)?;
-        //     socket
-        //         .bind(&SockAddr::from(self.socket))
-        //         .with_context(|| format!("Failed to bind socket: {}", self.socket))?;
-
-        //     std::net::UdpSocket::from(socket)
-        // };
-
         let ep = Endpoint::server(config, self.socket)?;
 
-        // let ep = Endpoint::new(
-        //     EndpointConfig::default(),
-        //     Some(config),
-        //     socket,
-        //     Arc::new(TokioRuntime),
-        // )?;
         self.ep = Some(ep);
         self.status = ServerStatus::Running(Instant::now());
         Ok(Instant::now())
@@ -253,30 +202,32 @@ impl Server for TuicServer {
                                             debug!("New connection connected (ID: {})", &connection.stable_id());
 
                                             let recevied_processor = Arc::clone(&tuic_processor);
-                                            let recevied_conn = connection.clone();
+                                            let recevied_conn = Arc::new(connection.clone());
                                             let recevied_context = Arc::clone(&context);
+
+                                            let conn_for_uni = Arc::clone(&recevied_conn);
+                                            let conn_for_bid = Arc::clone(&recevied_conn);
+                                            let conn_for_dat = Arc::clone(&recevied_conn);
 
                                             let t_uni = tokio::spawn(async move {
                                                 let _ = recevied_processor
-                                                    .process_uni(recevied_context, recevied_conn)
+                                                    .process_uni(recevied_context, conn_for_uni)
                                                     .await;
                                             });
 
                                             let bidirectional_processor = Arc::clone(&tuic_processor);
-                                            let bidirection_conn = connection.clone();
                                             let bidiraction_context = Arc::clone(&context);
                                             let t_bid = tokio::spawn(async move {
                                                  let _ = bidirectional_processor
-                                                                    .process_bidirectional(bidiraction_context, bidirection_conn)
+                                                                    .process_bidirectional(bidiraction_context, conn_for_bid)
                                                                     .await;
                                             });
 
                                             let datagram_processor = Arc::clone(&tuic_processor);
-                                            let datagram_conn = connection.clone();
                                             let datagram_ontext = Arc::clone(&context);
                                             let t_dat = tokio::spawn(async move {
                                                 let _ = datagram_processor
-                                                                .process_datagram(datagram_ontext, datagram_conn)
+                                                                .process_datagram(datagram_ontext, conn_for_dat)
                                                                 .await;
                                             });
 

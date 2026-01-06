@@ -18,7 +18,7 @@ impl CommandProcessor for PacketProcessor {
     async fn process(
         &self,
         context: Arc<RuntimeContext>,
-        connection: Connection,
+        connection: Arc<Connection>,
         command: Option<Command>,
     ) -> Result<bool> {
         let auth_result = context.wait_for_auth().await;
@@ -38,7 +38,6 @@ impl CommandProcessor for PacketProcessor {
             true => {
                 let session = context.get_session(packet.assoc_id);
 
-                //send data to server
                 let Some(remote_addr) = packet.address.to_socket_address().await else {
                     bail!("Failed to resolve address");
                 };
@@ -62,7 +61,6 @@ impl CommandProcessor for PacketProcessor {
                 );
 
                 for packet in response_packets {
-                    // Pre-calculate packet size to avoid buffer reallocation
                     let packet_size = packet.estimate_size();
                     let mut bytes = BytesMut::with_capacity(packet_size);
                     packet.write_to_buf(&mut bytes);
@@ -86,18 +84,14 @@ impl CommandProcessor for PacketProcessor {
                 Ok(true)
             }
             false => {
-                // Multi-fragment packet — reassemble first
                 let session = context.get_session(packet.assoc_id);
                 let assoc_id = packet.assoc_id;
                 let pkt_id = packet.pkt_id;
 
-                // Store this fragment and check if packet is complete
                 if let Some(completed_pkt_id) = session.accept(packet) {
-                    // All fragments received, get assembled payload
                     if let Some(assembled_payload) =
                         session.take_fragmented_packet(completed_pkt_id)
                     {
-                        // Get address from session (saved when first fragment arrived)
                         let Some(address) = session.get_address() else {
                             error!(
                                 "No address stored in session for associate_id: {}",
@@ -111,7 +105,6 @@ impl CommandProcessor for PacketProcessor {
                             bail!("Failed to resolve address");
                         };
 
-                        // Send assembled data to server and recv response
                         match session.send_and_recv(remote_addr, &assembled_payload).await {
                             Ok(response_buf) => {
                                 let recv_n = response_buf.len();
@@ -122,7 +115,6 @@ impl CommandProcessor for PacketProcessor {
                                     );
                                 }
 
-                                // Send response back to client
                                 let response_packets = Packet::get_packets_from(
                                     &response_buf,
                                     assoc_id,
@@ -162,7 +154,6 @@ impl CommandProcessor for PacketProcessor {
                         }
                     }
                 } else {
-                    // Still waiting for more fragments
                     if tracing::enabled!(tracing::Level::DEBUG) {
                         debug!(
                             "associate(ID:{}) packet(ID: {}) received fragment, waiting for more",

@@ -9,9 +9,14 @@ use super::{Server, ServerStatus};
 
 use anyhow::{Context, Error, Result};
 use async_trait::async_trait;
+use std::io::Cursor;
 use std::net::SocketAddr;
+use std::pin::Pin;
+use std::task::{Context as TaskContext, Poll};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::watch::Receiver;
+use tokio::time::{Duration, timeout};
 use tracing::{debug, error, info};
 
 use rustls::sign::CertifiedKey;
@@ -33,7 +38,7 @@ pub struct TrojanServer {
 
 impl TrojanServer {
     pub fn new_with_config(
-        config: crate::config::Config,
+        config: std::sync::Arc<crate::config::Config>,
         shutdown_rx: Option<Receiver<()>>,
     ) -> Result<Self, Error> {
         let socket = config
@@ -42,7 +47,6 @@ impl TrojanServer {
             .parse()
             .with_context(|| "Failed to parse server address")?;
 
-        // initialized all users' data
         let passwords: Vec<String> = config
             .trojan()
             .users()
@@ -109,7 +113,6 @@ impl Server for TrojanServer {
 
         if let Some(listener) = self.listener.take() {
             let processor = Arc::clone(&self.processor);
-            // move shutdown receiver into accept loop
             let shutdown_rx = self.shutdown_rx.take();
 
             tokio::spawn(async move {
@@ -152,7 +155,6 @@ async fn accept_loop(
     mut shutdown_rx: Option<Receiver<()>>,
 ) -> Result<(), Error> {
     loop {
-        // prepare accept future for select
         let accept_fut = listener.accept();
 
         if let Some(ref mut rx) = shutdown_rx {
@@ -194,8 +196,6 @@ async fn accept_loop(
     Ok(())
 }
 
-// TLS helpers are implemented in `src/server/tls.rs`.
-
 async fn handle_connection(
     tcp_stream: TcpStream,
     peer_addr: SocketAddr,
@@ -212,7 +212,95 @@ async fn handle_connection(
         }
     };
 
-    match tls_acceptor.accept(tcp_stream).await {
+    struct PrebufferedStream<S> {
+        buf: Cursor<Vec<u8>>,
+        stream: S,
+    }
+
+    impl<S: AsyncRead + Unpin> AsyncRead for PrebufferedStream<S> {
+        fn poll_read(
+            mut self: Pin<&mut Self>,
+            cx: &mut TaskContext<'_>,
+            buf_out: &mut ReadBuf<'_>,
+        ) -> Poll<std::io::Result<()>> {
+            let remaining =
+                (self.buf.get_ref().len() as u64).saturating_sub(self.buf.position()) as usize;
+            if remaining > 0 {
+                let to_copy = std::cmp::min(remaining, buf_out.remaining());
+                let pos = self.buf.position() as usize;
+                let slice = &self.buf.get_ref()[pos..pos + to_copy];
+                buf_out.put_slice(slice);
+                self.buf.set_position((pos + to_copy) as u64);
+                return Poll::Ready(Ok(()));
+            }
+
+            Pin::new(&mut self.stream).poll_read(cx, buf_out)
+        }
+    }
+
+    impl<S: AsyncWrite + Unpin> AsyncWrite for PrebufferedStream<S> {
+        fn poll_write(
+            mut self: Pin<&mut Self>,
+            cx: &mut TaskContext<'_>,
+            buf: &[u8],
+        ) -> Poll<std::io::Result<usize>> {
+            Pin::new(&mut self.stream).poll_write(cx, buf)
+        }
+
+        fn poll_flush(
+            mut self: Pin<&mut Self>,
+            cx: &mut TaskContext<'_>,
+        ) -> Poll<std::io::Result<()>> {
+            Pin::new(&mut self.stream).poll_flush(cx)
+        }
+
+        fn poll_shutdown(
+            mut self: Pin<&mut Self>,
+            cx: &mut TaskContext<'_>,
+        ) -> Poll<std::io::Result<()>> {
+            Pin::new(&mut self.stream).poll_shutdown(cx)
+        }
+    }
+
+    let mut tcp_stream = tcp_stream;
+    let mut tmp = [0u8; 5];
+    let mut prebuf = Vec::new();
+    match timeout(Duration::from_millis(200), tcp_stream.read(&mut tmp)).await {
+        Ok(Ok(n)) => {
+            if n > 0 {
+                prebuf.extend_from_slice(&tmp[..n]);
+            }
+        }
+        Ok(Err(e)) => {
+            debug!(
+                "[Trojan] Error reading initial bytes from {}: {}",
+                peer_addr, e
+            );
+        }
+        Err(_) => {}
+    }
+
+    if prebuf.len() >= 2 && !(prebuf[0] == 0x16 && prebuf[1] == 0x03) {
+        let sample_hex: String = prebuf
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<Vec<_>>()
+            .join(" ");
+        debug!(
+            "[Trojan] Non-TLS probe on TLS port from {}: {}",
+            peer_addr, sample_hex
+        );
+
+        let _ = tcp_stream.shutdown().await;
+        return;
+    }
+
+    let stream = PrebufferedStream {
+        buf: Cursor::new(prebuf),
+        stream: tcp_stream,
+    };
+
+    match tls_acceptor.accept(stream).await {
         Ok(tls_stream) => {
             debug!("[Trojan] TLS handshake completed with {}", peer_addr);
             let context = Arc::new(RuntimeContext::new(peer_addr.to_string()));

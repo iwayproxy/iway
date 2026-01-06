@@ -19,24 +19,24 @@ static GLOBAL_DNS_RESOLVER: Lazy<DnsResolver> = Lazy::new(|| DnsResolver::with_c
 
 #[derive(Debug)]
 pub enum Address {
-    SocketAddress(SocketAddr, Bytes), //Add bytes for conversion cache, originally from client command
-    DomainAddress(String, Port, Bytes), //Add bytes for conversion cache, originally from client command
+    Socket(SocketAddr, Bytes),
+    Domain(String, Port, Bytes),
     None,
 }
 
 impl Address {
     pub fn write_to_buf<B: BufMut>(&self, buf: &mut B) {
         match self {
-            Address::SocketAddress(_, cache) => buf.put(cache.as_ref()),
-            Address::DomainAddress(_, _, cache) => buf.put(cache.as_ref()),
+            Address::Socket(_, cache) => buf.put(cache.as_ref()),
+            Address::Domain(_, _, cache) => buf.put(cache.as_ref()),
             Address::None => buf.put_u8(0xFF),
         }
     }
 
     pub async fn to_socket_address(&self) -> Option<SocketAddr> {
         let socket_addr = match self {
-            Address::SocketAddress(socket_addr, _) => Some(*socket_addr),
-            Address::DomainAddress(domain, port, _) => (self.resolve(domain, port).await).ok(),
+            Address::Socket(socket_addr, _) => Some(*socket_addr),
+            Address::Domain(domain, port, _) => (self.resolve(domain, port).await).ok(),
             Address::None => None,
         };
 
@@ -85,7 +85,6 @@ impl Address {
                 cache.put_u8(address_type as u8);
                 cache.put_u8(len);
 
-                // Zero-copy: read directly into BytesMut then convert
                 let mut domain_buf = BytesMut::with_capacity(len as usize);
                 domain_buf.resize(len as usize, 0);
                 read.read_exact(&mut domain_buf).await?;
@@ -96,7 +95,7 @@ impl Address {
                 let port = read.read_u16().await?;
                 cache.put_u16(port);
 
-                Ok(Address::DomainAddress(address, port, cache.freeze()))
+                Ok(Address::Domain(address, port, cache.freeze()))
             }
             AddressType::IpV4 => {
                 let mut cache = BytesMut::with_capacity(1 + 4 + 2);
@@ -109,7 +108,7 @@ impl Address {
                 cache.put_u16(port);
 
                 let socket_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::from(ip_value)), port);
-                Ok(Address::SocketAddress(socket_addr, cache.freeze()))
+                Ok(Address::Socket(socket_addr, cache.freeze()))
             }
             AddressType::IpV6 => {
                 let mut cache = BytesMut::with_capacity(1 + 16 + 2);
@@ -122,7 +121,7 @@ impl Address {
                 cache.put_u16(port);
 
                 let socket_addr = SocketAddr::new(IpAddr::V6(Ipv6Addr::from(ip_value)), port);
-                Ok(Address::SocketAddress(socket_addr, cache.freeze()))
+                Ok(Address::Socket(socket_addr, cache.freeze()))
             }
             AddressType::None => Ok(Address::None),
         }
@@ -132,8 +131,8 @@ impl Address {
 impl fmt::Display for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::DomainAddress(addr, port, cache) => write!(f, "{addr}:{port} bin:{:?}", cache),
-            Self::SocketAddress(socket_addr, cache) => write!(f, "{socket_addr} bin:{:?}", cache),
+            Self::Domain(addr, port, cache) => write!(f, "{addr}:{port} bin:{:?}", cache),
+            Self::Socket(socket_addr, cache) => write!(f, "{socket_addr} bin:{:?}", cache),
             Self::None => write!(f, "None"),
         }
     }
@@ -193,11 +192,11 @@ impl AddressType {
 
     pub async fn from_address(value: Address) -> Self {
         match value {
-            Address::SocketAddress(socket_address, _) => match socket_address {
+            Address::Socket(socket_address, _) => match socket_address {
                 SocketAddr::V4(_) => AddressType::IpV4,
                 SocketAddr::V6(_) => AddressType::IpV6,
             },
-            Address::DomainAddress(_, _, _) => AddressType::Domain,
+            Address::Domain(_, _, _) => AddressType::Domain,
             Address::None => AddressType::None,
         }
     }

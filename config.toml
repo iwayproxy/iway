@@ -14,7 +14,7 @@ uuid = "e3f1c2b4a5d6478e9f0b1c2d3e4f5a88"
 password = "password2"
 
 [tuic]
-# disable TUIC by default
+
 enabled = false
 server_addr = "[::]:443"
 cert_path = "server.crt"
@@ -35,5 +35,4 @@ ttl_secs = 300
 [udp_session]
 session_timeout = 30
 socket_timeout = 10
-# max_sessions = 1000              # optional
-# max_reassembly_bytes_per_session = 65536  # optional
+
