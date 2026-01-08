@@ -281,15 +281,13 @@ async fn handle_connection(
     }
 
     if prebuf.len() >= 2 && !(prebuf[0] == 0x16 && prebuf[1] == 0x03) {
-        let sample_hex: String = prebuf
-            .iter()
-            .map(|b| format!("{:02x}", b))
-            .collect::<Vec<_>>()
-            .join(" ");
-        debug!(
-            "[Trojan] Non-TLS probe on TLS port from {}: {}",
-            peer_addr, sample_hex
-        );
+        if cfg!(debug_assertions) {
+            let sample_hex = hex::encode(&prebuf);
+            debug!(
+                "[Trojan] Non-TLS probe on TLS port from {}: {}",
+                peer_addr, sample_hex
+            );
+        }
 
         let _ = tcp_stream.shutdown().await;
         return;
@@ -303,7 +301,7 @@ async fn handle_connection(
     match tls_acceptor.accept(stream).await {
         Ok(tls_stream) => {
             debug!("[Trojan] TLS handshake completed with {}", peer_addr);
-            let context = Arc::new(RuntimeContext::new(peer_addr.to_string()));
+            let context = Arc::new(RuntimeContext::new(peer_addr));
 
             if let Err(e) = processor.process_connection_tls(tls_stream, context).await {
                 debug!("[Trojan] Connection processing error: {}", e);

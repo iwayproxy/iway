@@ -168,12 +168,13 @@ impl Server for TuicServer {
                 bail!("Server is still initializing");
             }
             ServerStatus::Running(_) => {
-                let ep = if let Some(ep) = &self.ep {
+                // Spawn the accept loop so start() returns promptly (consistent with Trojan)
+                let ep_clone = if let Some(ep) = &self.ep {
                     let addr = ep
                         .local_addr()
                         .with_context(|| "Failed to get local address")?;
                     info!("Starting TUIC server on {}", addr);
-                    ep
+                    ep.clone()
                 } else {
                     bail!("Need to initialize EndPoint first, call init() method",);
                 };
@@ -181,79 +182,83 @@ impl Server for TuicServer {
                 let tuic_processor = Arc::clone(&self.processor);
                 let mut shutdown_rx = self.shutdown_rx.as_mut().cloned();
 
-                loop {
-                    tokio::select! {
-                        incoming = ep.accept() => {
-                            let incoming = match incoming {
-                                Some(conn) => conn,
-                                None => {
-                                    debug!("Endpoint incoming stream closed!");
-                                    continue;
-                                }
-                            };
-
-                            let tuic_processor = Arc::clone(&tuic_processor);
-                            tokio::spawn(async move {
-                                match incoming.accept() {
-                                    Ok(connecting) => match connecting.await {
-                                        Ok(connection) => {
-                                            let context = Arc::new(RuntimeContext::new(OneShotNotifier::default()));
-
-                                            debug!("New connection connected (ID: {})", &connection.stable_id());
-
-                                            let recevied_processor = Arc::clone(&tuic_processor);
-                                            let recevied_conn = Arc::new(connection.clone());
-                                            let recevied_context = Arc::clone(&context);
-
-                                            let conn_for_uni = Arc::clone(&recevied_conn);
-                                            let conn_for_bid = Arc::clone(&recevied_conn);
-                                            let conn_for_dat = Arc::clone(&recevied_conn);
-
-                                            let t_uni = tokio::spawn(async move {
-                                                let _ = recevied_processor
-                                                    .process_uni(recevied_context, conn_for_uni)
-                                                    .await;
-                                            });
-
-                                            let bidirectional_processor = Arc::clone(&tuic_processor);
-                                            let bidiraction_context = Arc::clone(&context);
-                                            let t_bid = tokio::spawn(async move {
-                                                 let _ = bidirectional_processor
-                                                                    .process_bidirectional(bidiraction_context, conn_for_bid)
-                                                                    .await;
-                                            });
-
-                                            let datagram_processor = Arc::clone(&tuic_processor);
-                                            let datagram_ontext = Arc::clone(&context);
-                                            let t_dat = tokio::spawn(async move {
-                                                let _ = datagram_processor
-                                                                .process_datagram(datagram_ontext, conn_for_dat)
-                                                                .await;
-                                            });
-
-                                            let _ = tokio::join!(t_uni, t_bid, t_dat);
-                                            debug!("The connection (ID:{}) was closed!", &connection.stable_id());
-                                        }
-                                        Err(e) => {
-                                            debug!("Connecting await failed: {}", e);
-                                        }
-                                    },
-                                    Err(e) => {
-                                        debug!("Incoming.accept() failed: {}", e);
+                tokio::spawn(async move {
+                    loop {
+                        tokio::select! {
+                            incoming = ep_clone.accept() => {
+                                let incoming = match incoming {
+                                    Some(conn) => conn,
+                                    None => {
+                                        debug!("Endpoint incoming stream closed!");
+                                        continue;
                                     }
-                                }
-                            });
-                        }
-                        _ = async {
-                            if let Some(rx) = &mut shutdown_rx {
-                                let _ = rx.changed().await;
+                                };
+
+                                let tuic_processor = Arc::clone(&tuic_processor);
+                                tokio::spawn(async move {
+                                    match incoming.accept() {
+                                        Ok(connecting) => match connecting.await {
+                                            Ok(connection) => {
+                                                let context = Arc::new(RuntimeContext::new(OneShotNotifier::default()));
+
+                                                debug!("New connection connected (ID: {})", &connection.stable_id());
+
+                                                let recevied_processor = Arc::clone(&tuic_processor);
+                                                let recevied_conn = Arc::new(connection.clone());
+                                                let recevied_context = Arc::clone(&context);
+
+                                                let conn_for_uni = Arc::clone(&recevied_conn);
+                                                let conn_for_bid = Arc::clone(&recevied_conn);
+                                                let conn_for_dat = Arc::clone(&recevied_conn);
+
+                                                let t_uni = tokio::spawn(async move {
+                                                    let _ = recevied_processor
+                                                        .process_uni(recevied_context, conn_for_uni)
+                                                        .await;
+                                                });
+
+                                                let bidirectional_processor = Arc::clone(&tuic_processor);
+                                                let bidiraction_context = Arc::clone(&context);
+                                                let t_bid = tokio::spawn(async move {
+                                                     let _ = bidirectional_processor
+                                                                        .process_bidirectional(bidiraction_context, conn_for_bid)
+                                                                        .await;
+                                                });
+
+                                                let datagram_processor = Arc::clone(&tuic_processor);
+                                                let datagram_ontext = Arc::clone(&context);
+                                                let t_dat = tokio::spawn(async move {
+                                                    let _ = datagram_processor
+                                                                    .process_datagram(datagram_ontext, conn_for_dat)
+                                                                    .await;
+                                                });
+
+                                                let _ = tokio::join!(t_uni, t_bid, t_dat);
+                                                debug!("The connection (ID:{}) was closed!", &connection.stable_id());
+                                            }
+                                            Err(e) => {
+                                                debug!("Connecting await failed: {}", e);
+                                            }
+                                        },
+                                        Err(e) => {
+                                            debug!("Incoming.accept() failed: {}", e);
+                                        }
+                                    }
+                                });
                             }
-                        } => {
-                            info!("TUIC server received shutdown signal, breaking main loop");
-                            return Ok(Instant::now());
+                            _ = async {
+                                if let Some(rx) = &mut shutdown_rx {
+                                    let _ = rx.changed().await;
+                                }
+                            } => {
+                                info!("TUIC server received shutdown signal, breaking main loop");
+                                break;
+                            }
                         }
                     }
-                }
+                });
+
+                return Ok(Instant::now());
             }
             ServerStatus::Stopped(instant) => {
                 bail!("Cannot start: server was stopped at {:?}", instant)

@@ -89,19 +89,33 @@ impl ServerManager {
                 }
             }
         }
-        info!("ServerManager: Servers are initialized");
         Ok(Instant::now())
     }
 
     pub async fn start(&self) -> Result<Instant, Error> {
+        // Spawn start tasks for each server and wait for them to complete
+        let mut handles = Vec::new();
         for (_name, server) in self.servers.iter() {
             let server = Arc::clone(server);
-            tokio::spawn({
-                async move {
-                    let mut server = server.lock().await;
-                    let _ = server.start().await;
-                }
+            let handle = tokio::spawn(async move {
+                let mut server = server.lock().await;
+                server.start().await
             });
+            handles.push(handle);
+        }
+
+        for handle in handles {
+            match handle.await {
+                Ok(Ok(_instant)) => {
+                    // server started successfully
+                }
+                Ok(Err(e)) => {
+                    error!("Failed to start server: {}", e);
+                }
+                Err(e) => {
+                    error!("Server start task panicked: {}", e);
+                }
+            }
         }
 
         Ok(Instant::now())

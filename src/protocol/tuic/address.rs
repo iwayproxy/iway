@@ -7,9 +7,10 @@ use std::{
 
 use anyhow::{Context, Ok, Result, bail};
 use bytes::{BufMut, BytesMut};
-use once_cell::sync::Lazy;
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tracing::debug;
+
+use crate::net::util::is_local_addr;
 
 type Port = u16;
 
@@ -55,9 +56,9 @@ impl Address {
             Address::None => None,
         };
 
-        let socket_addr = if is_local_addr(socket_addr).await {
-            if let Some(addr) = socket_addr {
-                let addr = match addr {
+        let socket_addr = if let Some(addr) = socket_addr {
+            if is_local_addr(&addr) {
+                let local = match addr {
                     SocketAddr::V4(_) => {
                         SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), addr.port())
                     }
@@ -66,14 +67,14 @@ impl Address {
                     }
                 };
                 if tracing::enabled!(tracing::Level::DEBUG) {
-                    debug!("Using local address for socket: {:?}", addr);
+                    debug!("Using local address for socket: {:?}", local);
                 }
-                Some(addr)
+                Some(local)
             } else {
-                unreachable!("Socket address should not be None if is_local_addr is true");
+                Some(addr)
             }
         } else {
-            socket_addr
+            None
         };
 
         if tracing::enabled!(tracing::Level::DEBUG) {
@@ -150,30 +151,7 @@ impl AddressType {
     }
 }
 
-use std::collections::HashSet;
-
-static LOCAL_IPS: Lazy<HashSet<IpAddr>> = Lazy::new(|| {
-    let mut set = HashSet::new();
-
-    if let result::Result::Ok(ifaces) = if_addrs::get_if_addrs() {
-        for iface in ifaces {
-            set.insert(iface.ip());
-        }
-    }
-
-    set.insert(IpAddr::V4(std::net::Ipv4Addr::LOCALHOST));
-    set.insert(IpAddr::V6(std::net::Ipv6Addr::LOCALHOST));
-
-    set
-});
-
-pub async fn is_local_addr(addr: Option<SocketAddr>) -> bool {
-    let Some(addr) = addr else {
-        return false;
-    };
-
-    LOCAL_IPS.contains(&addr.ip())
-}
+// local ip utilities are provided by `crate::net::util`
 
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
 #[repr(u8)]

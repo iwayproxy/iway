@@ -25,17 +25,46 @@ use std::sync::Arc;
 use std::{cmp::max, env, time::Instant};
 use tracing::{error, info};
 
+use chrono::Local;
 use tracing_appender::rolling;
+use tracing_subscriber::fmt::format::Writer;
+use tracing_subscriber::fmt::time::FormatTime;
 use tracing_subscriber::{Layer, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 mod authenticate;
 mod config;
+mod net;
 mod processor;
 mod protocol;
 mod server;
 
 fn init_logger() {
-    let file_appender = rolling::daily("logs", "iway.log");
+    #[derive(Clone, Copy, Default)]
+    struct LocalTime;
+
+    impl FormatTime for LocalTime {
+        fn format_time(&self, w: &mut Writer<'_>) -> std::fmt::Result {
+            let ts = Local::now().format("%Y-%m-%d %H:%M:%S%:z");
+            write!(w, "{}", ts)
+        }
+    }
+
+    // Ensure log directory exists. Prefer a `logs` folder next to the executable
+    // so service/systemd runs with different working directories still write logs.
+    let log_dir = std::env::current_exe()
+        .ok()
+        .and_then(|mut p| {
+            p.pop();
+            p.push("logs");
+            Some(p)
+        })
+        .unwrap_or_else(|| std::path::PathBuf::from("logs"));
+
+    if let Err(e) = std::fs::create_dir_all(&log_dir) {
+        eprintln!("Failed to create log directory {:?}: {}", log_dir, e);
+    }
+
+    let file_appender = rolling::daily(log_dir, "iway.log");
 
     let file_layer = fmt::layer()
         .with_writer(file_appender)
@@ -44,6 +73,7 @@ fn init_logger() {
         .with_level(true)
         .with_line_number(true)
         .with_thread_names(true)
+        .with_timer(LocalTime)
         .with_filter(tracing_subscriber::filter::LevelFilter::INFO);
 
     #[cfg(debug_assertions)]
@@ -51,6 +81,7 @@ fn init_logger() {
         .with_target(false)
         .with_line_number(true)
         .pretty()
+        .with_timer(LocalTime)
         .with_filter(tracing_subscriber::filter::LevelFilter::DEBUG);
 
     #[cfg(not(debug_assertions))]
@@ -58,7 +89,8 @@ fn init_logger() {
         .with_target(false)
         .with_line_number(true)
         .pretty()
-        .with_filter(tracing_subscriber::filter::LevelFilter::WARN);
+        .with_timer(LocalTime)
+        .with_filter(tracing_subscriber::filter::LevelFilter::INFO);
     tracing_subscriber::registry()
         .with(console_layer)
         .with(file_layer)

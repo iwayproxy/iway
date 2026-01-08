@@ -4,22 +4,22 @@ use std::sync::Arc;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, split};
 use tokio::net::{TcpStream, UdpSocket};
 use tokio::select;
-use tokio::sync::{Mutex, mpsc};
+use tokio::sync::mpsc;
 use tokio_rustls::server::TlsStream;
 use tokio_util::sync::CancellationToken;
 
 use crate::authenticate::trojan::TrojanAuthenticationManager;
-use crate::protocol::trojan::address::{Address, AddressType};
+use crate::protocol::trojan::address::Address;
 use crate::protocol::trojan::command::{CommandType, TrojanRequest};
 
 #[allow(dead_code)]
 pub struct RuntimeContext {
-    pub client_addr: String,
+    pub client_addr: SocketAddr,
     pub authenticated: bool,
 }
 
 impl RuntimeContext {
-    pub fn new(client_addr: String) -> Self {
+    pub fn new(client_addr: SocketAddr) -> Self {
         Self {
             client_addr,
             authenticated: false,
@@ -88,7 +88,7 @@ impl TrojanConnectionProcessor {
     where
         S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
-        let target_addr = request.address.to_address_string();
+        let target_addr = request.address.to_socket_addrs().await?;
 
         let server_stream = TcpStream::connect(&target_addr)
             .await
@@ -108,110 +108,134 @@ impl TrojanConnectionProcessor {
     where
         S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
+        use socket2::{Domain, Protocol, SockAddr, Socket, Type};
         use tokio_util::sync::CancellationToken;
 
         let (mut tls_reader, mut tls_writer) = split(tls_stream);
 
-        let udp_v4 = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
-        let udp_v6 = match UdpSocket::bind("[::]:0").await {
-            Ok(s) => Some(Arc::new(s)),
-            Err(_) => None,
-        };
-
         let (udp_resp_tx, mut udp_resp_rx) = mpsc::channel::<(SocketAddr, bytes::Bytes)>(1024);
-
         let cancel = CancellationToken::new();
 
-        let recv_task = {
-            let udp_v4 = udp_v4.clone();
-            let udp_v6 = udp_v6.clone();
+        // We'll attempt to create a single dual-stack IPv6 socket (IPV6_V6ONLY = false).
+        // If that fails, fall back to separate v4 and v6 sockets.
+        let mut recv_handles: Vec<tokio::task::JoinHandle<()>> = Vec::new();
+        let udp_dual: Option<Arc<UdpSocket>> = (|| -> std::io::Result<Arc<UdpSocket>> {
+            let sock = Socket::new(Domain::IPV6, Type::DGRAM, Some(Protocol::UDP))?;
+            sock.set_only_v6(false)?;
+            let bind_addr = std::net::SocketAddr::V6(std::net::SocketAddrV6::new(
+                std::net::Ipv6Addr::UNSPECIFIED,
+                0,
+                0,
+                0,
+            ));
+            sock.bind(&SockAddr::from(bind_addr))?;
+            sock.set_nonblocking(true)?;
+            let stdsock: std::net::UdpSocket = sock.into();
+            Ok(Arc::new(UdpSocket::from_std(stdsock)?))
+        })()
+        .ok();
+
+        // sockets to use for sending
+        let udp_v4_sock: Option<Arc<UdpSocket>>;
+        let udp_v6_sock: Option<Arc<UdpSocket>>;
+
+        if let Some(dual) = udp_dual.clone() {
+            // spawn single recv task for dual-stack socket
             let tx = udp_resp_tx.clone();
-            let cancel = cancel.clone();
-
-            tokio::spawn(async move {
-                let shared_buf = Arc::new(Mutex::new(vec![0u8; 4096]));
-
+            let cancel_clone = cancel.clone();
+            let arc_clone = dual.clone();
+            let h = tokio::spawn(async move {
+                let mut buf = [0u8; 4096];
                 loop {
-                    if let Some(ref v6) = udp_v6 {
-                        let shared_buf1 = shared_buf.clone();
-                        let shared_buf2 = shared_buf.clone();
-
-                        tokio::select! {
-                            res = async {
-                                let mut b = shared_buf1.lock().await;
-                                match udp_v4.recv_from(&mut b[..]).await {
-                                    Ok((n, src)) => {
-                                        let data = bytes::Bytes::copy_from_slice(&b[..n]);
-                                        Ok((src, data))
-                                    }
-                                    Err(e) => Err(e),
+                    tokio::select! {
+                        res = arc_clone.recv_from(&mut buf) => {
+                            match res {
+                                Ok((n, src)) => {
+                                    let data = bytes::Bytes::copy_from_slice(&buf[..n]);
+                                    if tx.send((src, data)).await.is_err() { break; }
                                 }
-                            } => {
-                                match res {
-                                    Ok((src, data)) => {
-                                        if tx.send((src, data)).await.is_err() {
-                                            break;
-                                        }
-                                    }
-                                    Err(_) => break,
-                                }
+                                Err(_) => break,
                             }
-                            res = async {
-                                let mut b = shared_buf2.lock().await;
-                                        match v6.recv_from(&mut b[..]).await {
-                                    Ok((n, src)) => {
-                                        let data = bytes::Bytes::copy_from_slice(&b[..n]);
-                                        Ok((src, data))
-                                    }
-                                    Err(e) => Err(e),
-                                }
-                            } => {
-                                match res {
-                                    Ok((src, data)) => {
-                                        if tx.send((src, data)).await.is_err() {
-                                            break;
-                                        }
-                                    }
-                                    Err(_) => break,
-                                }
-                            }
-                            _ = cancel.cancelled() => break,
                         }
-                    } else {
-                        let shared_buf1 = shared_buf.clone();
-                        tokio::select! {
-                            res = async {
-                                let mut b = shared_buf1.lock().await;
-                                match udp_v4.recv_from(&mut b[..]).await {
-                                    Ok((n, src)) => {
-                                        let data = bytes::Bytes::copy_from_slice(&b[..n]);
-                                        Ok((src, data))
-                                    }
-                                    Err(e) => Err(e),
-                                }
-                            } => {
-                                match res {
-                                    Ok((src, data)) => {
-                                        if tx.send((src, data)).await.is_err() {
-                                            break;
-                                        }
-                                    }
-                                    Err(_) => break,
-                                }
-                            }
-                            _ = cancel.cancelled() => break,
-                        }
+                        _ = cancel_clone.cancelled() => break,
                     }
                 }
-            })
-        };
+            });
+            recv_handles.push(h);
+            udp_v4_sock = Some(dual.clone());
+            udp_v6_sock = Some(dual.clone());
+        } else {
+            // fallback: create separate v4 and v6 sockets
+            udp_v4_sock = match UdpSocket::bind("0.0.0.0:0").await {
+                Ok(s) => {
+                    let tx = udp_resp_tx.clone();
+                    let cancel_clone = cancel.clone();
+                    let arc = Arc::new(s);
+                    let arc_clone = arc.clone();
+                    let h = tokio::spawn(async move {
+                        let mut buf = [0u8; 4096];
+                        loop {
+                            tokio::select! {
+                                res = arc_clone.recv_from(&mut buf) => {
+                                    match res {
+                                        Ok((n, src)) => {
+                                            let data = bytes::Bytes::copy_from_slice(&buf[..n]);
+                                            if tx.send((src, data)).await.is_err() { break; }
+                                        }
+                                        Err(_) => break,
+                                    }
+                                }
+                                _ = cancel_clone.cancelled() => break,
+                            }
+                        }
+                    });
+                    recv_handles.push(h);
+                    Some(arc)
+                }
+                Err(e) => {
+                    tracing::error!("Failed to bind IPv4 socket: {}", e);
+                    None
+                }
+            };
 
-        /* =========================
-         * TLS reader → UDP send (choose v4/v6 socket according to target)
-         * ========================= */
+            udp_v6_sock = match UdpSocket::bind("[::]:0").await {
+                Ok(s) => {
+                    let tx = udp_resp_tx.clone();
+                    let cancel_clone = cancel.clone();
+                    let arc = Arc::new(s);
+                    let arc_clone = arc.clone();
+                    let h = tokio::spawn(async move {
+                        let mut buf = [0u8; 4096];
+                        loop {
+                            tokio::select! {
+                                res = arc_clone.recv_from(&mut buf) => {
+                                    match res {
+                                        Ok((n, src)) => {
+                                            let data = bytes::Bytes::copy_from_slice(&buf[..n]);
+                                            if tx.send((src, data)).await.is_err() { break; }
+                                        }
+                                        Err(_) => break,
+                                    }
+                                }
+                                _ = cancel_clone.cancelled() => break,
+                            }
+                        }
+                    });
+                    recv_handles.push(h);
+                    Some(arc)
+                }
+                Err(e) => {
+                    tracing::error!("Failed to bind IPv6 socket: {}", e);
+                    None
+                }
+            };
+        }
+
+        /* TLS reader → UDP send (use dual socket if available, otherwise select v4/v6) */
         let send_task = {
-            let udp_v4 = udp_v4.clone();
-            let udp_v6 = udp_v6.clone();
+            let udp_dual = udp_dual.clone();
+            let udp_v4_sock = udp_v4_sock.clone();
+            let udp_v6_sock = udp_v6_sock.clone();
             let cancel = cancel.clone();
 
             tokio::spawn(async move {
@@ -224,22 +248,52 @@ impl TrojanConnectionProcessor {
                         }
                     };
 
-                    let addrs = match frame.dst.to_socket_addrs().await {
+                    let target = match frame.dst.to_socket_addrs().await {
                         Ok(a) => a,
                         Err(_) => continue,
                     };
 
-                    if let Some(target) = addrs.first() {
-                        let send_res = if target.is_ipv4() {
-                            udp_v4.send_to(&frame.payload, target).await
-                        } else if let Some(ref v6) = udp_v6 {
-                            v6.send_to(&frame.payload, target).await
+                    // If we created a dual-stack IPv6 socket, use it for IPv6 targets
+                    // and for IPv4 targets send to an IPv4-mapped IPv6 address.
+                    if let Some(dual) = udp_dual.as_ref() {
+                        if target.is_ipv4() {
+                            if let std::net::SocketAddr::V4(sa_v4) = target {
+                                let o = sa_v4.ip().octets();
+                                let v6_octets: [u8; 16] = [
+                                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, o[0], o[1], o[2],
+                                    o[3],
+                                ];
+                                let mapped =
+                                    std::net::SocketAddr::V6(std::net::SocketAddrV6::new(
+                                        std::net::Ipv6Addr::from(v6_octets),
+                                        sa_v4.port(),
+                                        0,
+                                        0,
+                                    ));
+                                if let Err(e) = dual.send_to(&frame.payload, mapped).await {
+                                    tracing::error!("Failed to send UDP to {}: {}", mapped, e);
+                                }
+                            }
                         } else {
-                            Err(std::io::Error::other("No IPv6 socket available"))
-                        };
+                            if let Err(e) = dual.send_to(&frame.payload, target).await {
+                                tracing::error!("Failed to send UDP to {}: {}", target, e);
+                            }
+                        }
+                        continue;
+                    }
 
-                        if let Err(e) = send_res {
-                            tracing::error!("Failed to send UDP to {}: {}", target, e);
+                    // otherwise select based on address family and use v4/v6 sockets
+                    if target.is_ipv4() {
+                        if let Some(sock) = udp_v4_sock.as_ref() {
+                            if let Err(e) = sock.send_to(&frame.payload, target).await {
+                                tracing::error!("Failed to send UDP to {}: {}", target, e);
+                            }
+                        }
+                    } else {
+                        if let Some(sock) = udp_v6_sock.as_ref() {
+                            if let Err(e) = sock.send_to(&frame.payload, target).await {
+                                tracing::error!("Failed to send UDP to {}: {}", target, e);
+                            }
                         }
                     }
                 }
@@ -251,18 +305,7 @@ impl TrojanConnectionProcessor {
                 msg = udp_resp_rx.recv() => {
                     let Some((src, payload)) = msg else { break; };
 
-                    let addr = match src {
-                        std::net::SocketAddr::V4(sa_v4) => Address {
-                            addr_type: AddressType::IPv4,
-                            host: sa_v4.ip().to_string(),
-                            port: sa_v4.port(),
-                        },
-                        std::net::SocketAddr::V6(sa_v6) => Address {
-                            addr_type: AddressType::IPv6,
-                            host: sa_v6.ip().to_string(),
-                            port: sa_v6.port(),
-                        },
-                    };
+                    let addr = Address::Socket(src);
 
                     if let Err(e) = write_trojan_udp_frame(&mut tls_writer, &addr, payload.as_ref()).await {
                         tracing::error!("Failed to write UDP frame to TLS: {}", e);
@@ -278,7 +321,9 @@ impl TrojanConnectionProcessor {
 
         cancel.cancel();
         drop(udp_resp_tx);
-        recv_task.abort();
+        for h in recv_handles {
+            h.abort();
+        }
         send_task.abort();
 
         Ok(())
@@ -381,27 +426,26 @@ async fn write_trojan_udp_frame<W: AsyncWriteExt + Unpin>(
     addr: &Address,
     payload: &[u8],
 ) -> Result<()> {
-    match addr.addr_type {
-        AddressType::IPv4 => {
-            writer.write_u8(0x01).await?;
-            writer
-                .write_all(&addr.host.parse::<std::net::Ipv4Addr>()?.octets())
-                .await?;
-        }
-        AddressType::IPv6 => {
-            writer.write_u8(0x04).await?;
-            writer
-                .write_all(&addr.host.parse::<std::net::Ipv6Addr>()?.octets())
-                .await?;
-        }
-        AddressType::DomainName => {
+    match addr {
+        Address::Socket(sa) => match sa {
+            std::net::SocketAddr::V4(v4) => {
+                writer.write_u8(0x01).await?;
+                writer.write_all(&v4.ip().octets()).await?;
+                writer.write_u16(v4.port()).await?;
+            }
+            std::net::SocketAddr::V6(v6) => {
+                writer.write_u8(0x04).await?;
+                writer.write_all(&v6.ip().octets()).await?;
+                writer.write_u16(v6.port()).await?;
+            }
+        },
+        Address::Domain(domain, port) => {
             writer.write_u8(0x03).await?;
-            writer.write_u8(addr.host.len() as u8).await?;
-            writer.write_all(addr.host.as_bytes()).await?;
+            writer.write_u8(domain.len() as u8).await?;
+            writer.write_all(domain.as_bytes()).await?;
+            writer.write_u16(*port).await?;
         }
     }
-
-    writer.write_u16(addr.port).await?;
     writer.write_u16(payload.len() as u16).await?;
     writer.write_all(b"\r\n").await?;
     writer.write_all(payload).await?;

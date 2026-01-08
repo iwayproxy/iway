@@ -1,12 +1,14 @@
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use std::{
-    fmt, io,
-    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
+    fmt,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
 };
 use tokio::{
     io::{AsyncRead, AsyncReadExt},
     net::lookup_host,
 };
+
+use crate::net::util::is_local_addr;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -28,10 +30,9 @@ impl AddressType {
 }
 
 #[derive(Debug, Clone)]
-pub struct Address {
-    pub addr_type: AddressType,
-    pub host: String,
-    pub port: u16,
+pub enum Address {
+    Socket(std::net::SocketAddr),
+    Domain(String, u16),
 }
 
 impl Address {
@@ -41,15 +42,16 @@ impl Address {
             .await
             .context("Failed to read address type")?;
         let addr_type = AddressType::from_u8(addr_type_byte)?;
-
-        let host = match addr_type {
+        let address = match addr_type {
             AddressType::IPv4 => {
                 let mut buf = [0u8; 4];
                 reader
                     .read_exact(&mut buf)
                     .await
                     .context("Failed to read IPv4 address")?;
-                std::net::IpAddr::V4(std::net::Ipv4Addr::from(buf)).to_string()
+                let ip = std::net::IpAddr::V4(std::net::Ipv4Addr::from(buf));
+                let port = reader.read_u16().await.context("Failed to read port")?;
+                Address::Socket(std::net::SocketAddr::new(ip, port))
             }
             AddressType::DomainName => {
                 let len = reader
@@ -61,7 +63,9 @@ impl Address {
                     .read_exact(&mut buf)
                     .await
                     .context("Failed to read domain name")?;
-                String::from_utf8(buf).context("Invalid domain name encoding")?
+                let domain = String::from_utf8(buf).context("Invalid domain name encoding")?;
+                let port = reader.read_u16().await.context("Failed to read port")?;
+                Address::Domain(domain, port)
             }
             AddressType::IPv6 => {
                 let mut buf = [0u8; 16];
@@ -69,53 +73,44 @@ impl Address {
                     .read_exact(&mut buf)
                     .await
                     .context("Failed to read IPv6 address")?;
-                std::net::IpAddr::V6(std::net::Ipv6Addr::from(buf)).to_string()
+                let ip = std::net::IpAddr::V6(std::net::Ipv6Addr::from(buf));
+                let port = reader.read_u16().await.context("Failed to read port")?;
+                Address::Socket(std::net::SocketAddr::new(ip, port))
             }
         };
 
-        let port = reader.read_u16().await.context("Failed to read port")?;
-
-        Ok(Address {
-            addr_type,
-            host,
-            port,
-        })
+        Ok(address)
     }
 
-    pub fn to_address_string(&self) -> String {
-        format!("{}:{}", self.host, self.port)
-    }
+    pub async fn to_socket_addrs(&self) -> Result<SocketAddr> {
+        let mut sa = match self {
+            Address::Socket(sa) => Ok(*sa),
+            Address::Domain(domain, port) => {
+                let mut addrs = lookup_host((domain.as_str(), *port)).await?;
+                addrs.next().ok_or_else(|| anyhow!("no addresses found"))
+            }
+        }?;
 
-    pub async fn to_socket_addrs(&self) -> io::Result<Vec<SocketAddr>> {
-        match self.addr_type {
-            AddressType::IPv4 => {
-                let ip: Ipv4Addr = self
-                    .host
-                    .parse()
-                    .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
-                Ok(vec![SocketAddr::new(ip.into(), self.port)])
-            }
-            AddressType::IPv6 => {
-                let ip: Ipv6Addr = self
-                    .host
-                    .parse()
-                    .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
-                Ok(vec![SocketAddr::new(ip.into(), self.port)])
-            }
-            AddressType::DomainName => {
-                let addrs = lookup_host((self.host.as_str(), self.port)).await?;
-                Ok(addrs.collect())
-            }
+        if is_local_addr(&sa) {
+            sa = match sa.ip() {
+                std::net::IpAddr::V4(_) => {
+                    SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), sa.port())
+                }
+                std::net::IpAddr::V6(_) => {
+                    SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), sa.port())
+                }
+            };
         }
+
+        Ok(sa)
     }
 }
 
 impl fmt::Display for Address {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.addr_type {
-            AddressType::IPv4 => write!(f, "IPv4({}:{})", self.host, self.port),
-            AddressType::DomainName => write!(f, "Domain({}:{})", self.host, self.port),
-            AddressType::IPv6 => write!(f, "IPv6([{}]:{})", self.host, self.port),
+        match self {
+            Address::Socket(sa) => write!(f, "{}", sa),
+            Address::Domain(d, p) => write!(f, "{}:{}", d, p),
         }
     }
 }
