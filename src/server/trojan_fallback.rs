@@ -13,10 +13,10 @@ impl FallbackHandler {
         mut client_stream: TcpStream,
         fallback_addr: SocketAddr,
     ) -> Result<()> {
-        match TcpStream::connect(fallback_addr).await {
-            Ok(mut fallback_stream) => {
+        match crate::net::tcp::connect(fallback_addr).await {
+            Ok(fallback_stream) => {
                 let (mut client_read, mut client_write) = client_stream.split();
-                let (mut fallback_read, mut fallback_write) = fallback_stream.split();
+                let (mut fallback_read, mut fallback_write) = fallback_stream.into_split();
 
                 tokio::select! {
                     result = tokio::io::copy(&mut client_read, &mut fallback_write) => {

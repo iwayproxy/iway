@@ -1,8 +1,9 @@
+use crate::net::tcp as net_tcp;
 use anyhow::{Context, Result, bail};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, split};
-use tokio::net::{TcpStream, UdpSocket};
+use tokio::net::UdpSocket;
 use tokio::select;
 use tokio::sync::mpsc;
 use tokio_rustls::server::TlsStream;
@@ -90,7 +91,7 @@ impl TrojanConnectionProcessor {
     {
         let target_addr = request.address.to_socket_addrs().await?;
 
-        let server_stream = TcpStream::connect(&target_addr)
+        let server_stream = net_tcp::connect(target_addr)
             .await
             .with_context(|| format!("Failed to connect to {}", target_addr))?;
 
@@ -263,13 +264,12 @@ impl TrojanConnectionProcessor {
                                     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, o[0], o[1], o[2],
                                     o[3],
                                 ];
-                                let mapped =
-                                    std::net::SocketAddr::V6(std::net::SocketAddrV6::new(
-                                        std::net::Ipv6Addr::from(v6_octets),
-                                        sa_v4.port(),
-                                        0,
-                                        0,
-                                    ));
+                                let mapped = std::net::SocketAddr::V6(std::net::SocketAddrV6::new(
+                                    std::net::Ipv6Addr::from(v6_octets),
+                                    sa_v4.port(),
+                                    0,
+                                    0,
+                                ));
                                 if let Err(e) = dual.send_to(&frame.payload, mapped).await {
                                     tracing::error!("Failed to send UDP to {}: {}", mapped, e);
                                 }

@@ -151,8 +151,6 @@ impl AddressType {
     }
 }
 
-// local ip utilities are provided by `crate::net::util`
-
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
 #[repr(u8)]
 pub enum AddressType {

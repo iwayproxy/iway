@@ -1,12 +1,9 @@
+use crate::net::tcp as net_tcp;
 use anyhow::{Context as AnyhowContext, Result, bail};
 use async_trait::async_trait;
 use quinn::Connection;
-use socket2::{Domain, Socket, TcpKeepalive, Type};
-use std::{net::SocketAddr, sync::Arc, time::Duration};
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpStream,
-};
+use std::sync::Arc;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::debug;
 
 use crate::{
@@ -56,14 +53,7 @@ impl CommandProcessor for ConnectProcessor {
                     .await
                     .context(format!("Failed to resolve address {}", &connect.address()))?;
 
-                let tcp_stream = match connect_with_keepalive(
-                    socket_addr,
-                    Duration::from_secs(5),
-                    Duration::from_secs(2),
-                    1,
-                )
-                .await
-                {
+                let tcp_stream = match net_tcp::connect(socket_addr).await {
                     Ok(s) => s,
                     Err(e) => {
                         debug!("Failed to connect to {}, error:{}", &socket_addr, e);
@@ -112,42 +102,6 @@ impl CommandProcessor for ConnectProcessor {
         }
 
         Ok(false)
-    }
-}
-
-pub async fn connect_with_keepalive(
-    addr: SocketAddr,
-    keepalive_idle: Duration,
-    keepalive_interval: Duration,
-    retries: u32,
-) -> Result<TcpStream> {
-    let socket = Socket::new(Domain::for_address(addr), Type::STREAM, None)?;
-    socket.set_nonblocking(true)?;
-    socket.set_linger(Some(Duration::ZERO))?;
-    let keepalive = TcpKeepalive::new()
-        .with_time(keepalive_idle)
-        .with_interval(keepalive_interval)
-        .with_retries(retries);
-    socket.set_tcp_keepalive(&keepalive)?;
-
-    match socket.connect(&addr.into()) {
-        Ok(_) => {}
-        Err(err)
-            if err.kind() == std::io::ErrorKind::WouldBlock
-                || err.raw_os_error() == Some(libc::EINPROGRESS) =>
-        {
-            debug!("Non-blocking connect in progress to {}", addr);
-        }
-        Err(err) => return Err(anyhow::Error::new(err).context("Connect failed")),
-    }
-
-    let stream = TcpStream::from_std(socket.into())?;
-
-    stream.writable().await?;
-
-    match stream.take_error()? {
-        None => Ok(stream),
-        Some(e) => Err(anyhow::Error::new(e).context("Async connect failed")),
     }
 }
 
