@@ -3,6 +3,7 @@ use zeroize::Zeroize;
 
 use anyhow::Context;
 use anyhow::Result;
+use subtle::ConstantTimeEq;
 use tokio::io::{AsyncRead, AsyncReadExt};
 use uuid::Uuid;
 
@@ -55,7 +56,6 @@ impl Authenticate {
     }
 
     pub fn verify_token(&self, expected: &[u8; TOKEN_LEN]) -> Result<bool> {
-        use subtle::ConstantTimeEq;
         Ok(self.token.ct_eq(expected).into())
     }
 }
