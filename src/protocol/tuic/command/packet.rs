@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 
 use bytes::{BufMut, Bytes, BytesMut};
+use std::net::SocketAddr;
 use std::{fmt::Display, sync::Arc};
 
 use crate::protocol::tuic::{address::Address, header::Header};
@@ -117,8 +118,8 @@ impl Packet {
         let base_size = 10;
         let addr_size = match &*self.address {
             Address::Socket(socket_addr) => match socket_addr {
-                std::net::SocketAddr::V4(_) => 1 + 4 + 2,
-                std::net::SocketAddr::V6(_) => 1 + 16 + 2,
+                SocketAddr::V4(_) => 1 + 4 + 2,
+                SocketAddr::V6(_) => 1 + 16 + 2,
             },
             Address::Domain(domain, _) => 1 + 1 + domain.as_bytes().len() + 2,
             Address::None => 1,
