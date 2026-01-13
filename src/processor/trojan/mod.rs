@@ -37,9 +37,10 @@ impl TrojanConnectionProcessor {
     pub fn new(auth: Arc<TrojanAuthenticationManager>) -> Self {
         Self {
             auth,
-            fallback_addr: "127.0.0.1:80"
-                .parse()
-                .unwrap_or_else(|_| "127.0.0.1:80".parse().unwrap()),
+            fallback_addr: std::net::SocketAddr::new(
+                std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
+                80,
+            ),
         }
     }
 

@@ -132,7 +132,7 @@ impl UdpSession {
             }
 
             if frag_pkt.received.len() == 1 {
-                if let Some(bytes) = frag_pkt.received.into_iter().next().unwrap() {
+                if let Some(Some(bytes)) = frag_pkt.received.into_iter().next() {
                     return Some(bytes);
                 }
                 return None;

@@ -10,10 +10,8 @@ use super::{Server, ServerStatus};
 use anyhow::{Context, Error, Result};
 use async_trait::async_trait;
 use std::net::SocketAddr;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::watch::Receiver;
-use tokio::time::{Duration, timeout};
 use tracing::{debug, error, info};
 
 use rustls::sign::CertifiedKey;
@@ -209,36 +207,7 @@ async fn handle_connection(
         }
     };
 
-    let mut tcp_stream = tcp_stream;
-    let mut tmp = [0u8; 5];
-    let mut prebuf = Vec::new();
-    match timeout(Duration::from_millis(200), tcp_stream.read(&mut tmp)).await {
-        Ok(Ok(n)) => {
-            if n > 0 {
-                prebuf.extend_from_slice(&tmp[..n]);
-            }
-        }
-        Ok(Err(e)) => {
-            debug!(
-                "[Trojan] Error reading initial bytes from {}: {}",
-                peer_addr, e
-            );
-        }
-        Err(_) => {}
-    }
-
-    if prebuf.len() >= 2 && !(prebuf[0] == 0x16 && prebuf[1] == 0x03) {
-        if cfg!(debug_assertions) {
-            let sample_hex = hex::encode(&prebuf);
-            debug!(
-                "[Trojan] Non-TLS probe on TLS port from {}: {}",
-                peer_addr, sample_hex
-            );
-        }
-
-        let _ = tcp_stream.shutdown().await;
-        return;
-    }
+    let tcp_stream = tcp_stream;
 
     match tls_acceptor.accept(tcp_stream).await {
         Ok(tls_stream) => {
