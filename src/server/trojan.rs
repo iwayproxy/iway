@@ -9,11 +9,8 @@ use super::{Server, ServerStatus};
 
 use anyhow::{Context, Error, Result};
 use async_trait::async_trait;
-use std::io::Cursor;
 use std::net::SocketAddr;
-use std::pin::Pin;
-use std::task::{Context as TaskContext, Poll};
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::watch::Receiver;
 use tokio::time::{Duration, timeout};
@@ -212,56 +209,6 @@ async fn handle_connection(
         }
     };
 
-    struct PrebufferedStream<S> {
-        buf: Cursor<Vec<u8>>,
-        stream: S,
-    }
-
-    impl<S: AsyncRead + Unpin> AsyncRead for PrebufferedStream<S> {
-        fn poll_read(
-            mut self: Pin<&mut Self>,
-            cx: &mut TaskContext<'_>,
-            buf_out: &mut ReadBuf<'_>,
-        ) -> Poll<std::io::Result<()>> {
-            let remaining =
-                (self.buf.get_ref().len() as u64).saturating_sub(self.buf.position()) as usize;
-            if remaining > 0 {
-                let to_copy = std::cmp::min(remaining, buf_out.remaining());
-                let pos = self.buf.position() as usize;
-                let slice = &self.buf.get_ref()[pos..pos + to_copy];
-                buf_out.put_slice(slice);
-                self.buf.set_position((pos + to_copy) as u64);
-                return Poll::Ready(Ok(()));
-            }
-
-            Pin::new(&mut self.stream).poll_read(cx, buf_out)
-        }
-    }
-
-    impl<S: AsyncWrite + Unpin> AsyncWrite for PrebufferedStream<S> {
-        fn poll_write(
-            mut self: Pin<&mut Self>,
-            cx: &mut TaskContext<'_>,
-            buf: &[u8],
-        ) -> Poll<std::io::Result<usize>> {
-            Pin::new(&mut self.stream).poll_write(cx, buf)
-        }
-
-        fn poll_flush(
-            mut self: Pin<&mut Self>,
-            cx: &mut TaskContext<'_>,
-        ) -> Poll<std::io::Result<()>> {
-            Pin::new(&mut self.stream).poll_flush(cx)
-        }
-
-        fn poll_shutdown(
-            mut self: Pin<&mut Self>,
-            cx: &mut TaskContext<'_>,
-        ) -> Poll<std::io::Result<()>> {
-            Pin::new(&mut self.stream).poll_shutdown(cx)
-        }
-    }
-
     let mut tcp_stream = tcp_stream;
     let mut tmp = [0u8; 5];
     let mut prebuf = Vec::new();
@@ -293,12 +240,7 @@ async fn handle_connection(
         return;
     }
 
-    let stream = PrebufferedStream {
-        buf: Cursor::new(prebuf),
-        stream: tcp_stream,
-    };
-
-    match tls_acceptor.accept(stream).await {
+    match tls_acceptor.accept(tcp_stream).await {
         Ok(tls_stream) => {
             debug!("[Trojan] TLS handshake completed with {}", peer_addr);
             let context = Arc::new(RuntimeContext::new(peer_addr));
@@ -308,7 +250,7 @@ async fn handle_connection(
             }
         }
         Err(e) => {
-            info!(
+            debug!(
                 "[Trojan] TLS handshake failed with client IP: {}, Error: {}",
                 peer_addr, e
             );
