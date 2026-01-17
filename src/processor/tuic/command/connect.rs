@@ -78,22 +78,22 @@ impl CommandProcessor for ConnectProcessor {
                     r
                 });
 
-                let first = tokio::select! {
+                let _first = tokio::select! {
                     r = &mut quic_to_tcp => (Some(r), None),
                     r = &mut tcp_to_quic => (None, Some(r)),
                 };
 
-                let (_r1, _r2) = match first {
-                    (Some(r1), None) => {
-                        let r2 = tcp_to_quic.await;
-                        (r1?, r2?)
-                    }
-                    (None, Some(r2)) => {
-                        let r1 = quic_to_tcp.await;
-                        (r1?, r2?)
-                    }
-                    _ => unreachable!(),
-                };
+                // let (_r1, _r2) = match first {
+                //     (Some(r1), None) => {
+                //         let r2 = tcp_to_quic.await;
+                //         (r1?, r2?)
+                //     }
+                //     (None, Some(r2)) => {
+                //         let r1 = quic_to_tcp.await;
+                //         (r1?, r2?)
+                //     }
+                //     _ => unreachable!(),
+                // };
 
                 anyhow::Ok(())
             };
